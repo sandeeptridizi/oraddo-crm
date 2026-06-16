@@ -16,6 +16,7 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userType, setUserType] = useState<UserType | null>(null);
   const [authScreen, setAuthScreen] = useState<AuthScreen>("login");
+  const [signupRole, setSignupRole] = useState<"user" | "admin" | "employee">("user");
 
   const handleLogin = (type: UserType) => {
     setUserType(type);
@@ -72,9 +73,9 @@ export default function App() {
 
     return (
       <Signup
-        role="user" // Signup still uses role selection for now
+        role={signupRole}
         onShowLogin={() => setAuthScreen("login")}
-        onSwitchRole={(role) => console.log("Signup role switch:", role)}
+        onSwitchRole={(role) => setSignupRole(role)}
       />
     );
   }

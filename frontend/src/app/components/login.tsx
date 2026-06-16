@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Button } from "./ui/button";
-import { Sparkles, Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
 import api from "../api";
 
 type UserType = "organization" | "admin" | "employee";
@@ -11,21 +11,12 @@ interface LoginProps {
 }
 
 export function Login({ onLogin, onShowSignup }: LoginProps) {
-  const [localRole, setLocalRole] = useState<UserType>("organization");
-  const defaultOrganizationId = "SEED_ORG_001";
-  const [email, setEmail] = useState("");
+const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
  
-  const demoCredentials = [
-    { label: "Admin", email: "admin@ok.com", password: "123456" },
-    { label: "Organization", email: "org@ok.com", password: "123456" },
-    { label: "Employee", email: "employee@ok.com", password: "123456" }
-  ];
-  const [demoIndex, setDemoIndex] = useState(0);
-
-  const getUserTypeFromRole = (role: string): UserType => {
+const getUserTypeFromRole = (role: string): UserType => {
     const r = String(role).toLowerCase();
     if (r.includes("admin")) return "admin";
     if (r.includes("organization")) return "organization";
@@ -65,15 +56,7 @@ export function Login({ onLogin, onShowSignup }: LoginProps) {
     }
   };
 
-  const handleDemoLogin = () => {
-    const credentials = demoCredentials[demoIndex];
-    setEmail(credentials.email);
-    setPassword(credentials.password);
-    setLocalRole(getUserTypeFromRole(credentials.label));
-    setDemoIndex((prev) => (prev + 1) % demoCredentials.length);
-  };
-
-  return (
+return (
     <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-[#F0E9FF] via-white to-[#F0E9FF]">
  
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -174,27 +157,14 @@ export function Login({ onLogin, onShowSignup }: LoginProps) {
  
                 <Button
                   type="submit"
-                  className={`w-full py-3 text-white shadow-lg transition-all ${
-                    localRole === "admin"
-                      ? "bg-gradient-to-r from-[#200B43] to-[#422462] hover:from-[#422462] hover:to-[#200B43] shadow-[#422462]/30"
-                      : "bg-gradient-to-r from-[#422462] to-[#5A4079] hover:from-[#5A4079] hover:to-[#422462] shadow-[#937CB4]/30"
-                  }`}
+                  className="w-full py-3 text-white shadow-lg transition-all bg-gradient-to-r from-[#200B43] to-[#422462] hover:from-[#422462] hover:to-[#200B43] shadow-[#422462]/30"
                 >
                   Sign In
                   <ArrowRight className="h-5 w-5 ml-2" />
                 </Button>
  
-                <Button
-                  type="button"
-                  onClick={handleDemoLogin}
-                  variant="outline"
-                  className="w-full py-3 border-[#937CB4]/30 text-[#422462] hover:bg-[#F0E9FF] hover:text-[#422462] hover:border-[#937CB4]/50"
-                >
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Demo: {demoCredentials[demoIndex].label}
-                </Button>
 
-                <div className="text-center text-sm text-[#5A4079]">
+<div className="text-center text-sm text-[#5A4079]">
                   <span>New to Oraddo? </span>
                   <button
                     type="button"
