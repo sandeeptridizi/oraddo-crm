@@ -67,6 +67,7 @@ const organizationSignUp = require("./api/routes/orgRegisterRoute");
 const premiumPlans = require("./api/routes/premiumPlansRoute");
 const renewelPlans = require("./api/routes/planRenewelRoute");
 const phonepeRoute = require("./api/routes/phonepayRoute");
+require("./api/models/PendingPayment"); // ensure PendingPayments table is created on sync
 const contactForm = require("./api/routes/contactForm");
 const organizationInvoice = require("./api/routes/organizationInvoiceRoute");
 const serviceRouter = require("./api/routes/invoiceModuleServicesRoute");

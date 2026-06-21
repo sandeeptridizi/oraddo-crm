@@ -20,4 +20,6 @@ export const plansService = {
   create: (data: Partial<ApiPlan>) => api.post<ApiPlan>("/api/plans", data),
   update: (id: number, data: Partial<ApiPlan>) => api.put<ApiPlan>(`/api/plans/${id}`, data),
   delete: (id: number) => api.delete(`/api/plans/${id}`),
+  // Public-safe listing used by the unauthenticated /pricing page.
+  getActivePublic: () => api.get<{ status: boolean; data: ApiPlan[] }>("/api/plans/public"),
 };

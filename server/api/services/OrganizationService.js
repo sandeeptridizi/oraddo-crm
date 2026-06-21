@@ -8,6 +8,7 @@ const bcrypt = require('bcryptjs');
 const cron = require('node-cron');
 const { Op } = require('sequelize');
 const OrganizationInvoices = require('../models/organizationInvoiceModule');
+const OrgSignUp = require('../models/organizationSignUp');
 
 
 const getNextInvoiceNumber = async () => {
@@ -476,8 +477,118 @@ const deleteCompany = async (id) => {
   return await company.destroy();
 };
 
+// Create a trial organization from a public signup. Mirrors createCompany but
+// skips file uploads and forces a 7-day plan window regardless of the chosen
+// tier's stored duration. Returns the new Organization row.
+const createTrialOrganization = async (data) => {
+  const {
+    fullName,
+    email,
+    password,
+    phoneNumber,
+    companyName,
+    city,
+    planId,
+    signupId,
+  } = data;
+
+  // Skip re-hashing if the password is already a bcrypt hash (prevents double-hash
+  // when called from the payment callback which passes the stored hashed password).
+  const alreadyHashed = password && (password.startsWith("$2a$") || password.startsWith("$2b$") || password.startsWith("$2y$"));
+  const hashedPassword = password ? (alreadyHashed ? password : await bcrypt.hash(password, 10)) : null;
+
+  const now = new Date();
+  const expiry = new Date(now);
+  expiry.setDate(expiry.getDate() + 7);
+
+  const organizationData = await Company.create({
+    organizationID: `TRIAL-${Date.now()}`,
+    companyName: companyName || `${fullName || "Trial"}'s Workspace`,
+    companyType: "Trial",
+    industryType: "Trial",
+    companyAddress: "TBD",
+    founderYear: now.getFullYear(),
+    companyLogo: null,
+    companyWebsite: null,
+    GSTIN: null,
+    No_ofEmployees: 0,
+    planId: planId || null,
+    country: null,
+    state: null,
+    phoneNumber: phoneNumber || null,
+    userName: email,
+    password: hashedPassword,
+    city: city || null,
+    planStartDate: now,
+    planExpiryDate: expiry,
+    planGracePeriodEnd: expiry,
+    adminName: fullName || null,
+    email: email,
+  });
+
+  const { id: orgId, password: orgPassword, userName: orgUserName } = organizationData;
+
+  // create the Management admin in Emp_onboarding (same shape as createCompany)
+  const adminData = {
+    orgnaizationId: orgId,
+    password: orgPassword,
+    userName: orgUserName,
+    role: "Management",
+    emp_name: fullName,
+    bussiness_email: email,
+    contact_number: phoneNumber,
+    isFinance: true,
+    isBusiness: true,
+    teamLeadId: null,
+    isDelete: false,
+    city: city || null,
+    employee_type: "Permanent",
+  };
+  await Employee_Onboarding.create(adminData, {
+    fields: [
+      "orgnaizationId",
+      "password",
+      "userName",
+      "role",
+      "emp_name",
+      "bussiness_email",
+      "contact_number",
+      "isFinance",
+      "isBusiness",
+      "teamLeadId",
+      "isDelete",
+      "city",
+      "employee_type",
+    ],
+    returning: false,
+  });
+
+  // create the trial invoice so the org appears on the invoices listing
+  await OrganizationInvoices.create({
+    organizationId: orgId,
+    planId: planId || null,
+    startDate: now,
+    endDate: expiry,
+    graceDate: expiry,
+    invoiceNumber: await getNextInvoiceNumber(),
+    invoiceDate: now,
+  });
+
+  // flip OrgSignUp.status to Converted once the operational org row exists
+  if (signupId) {
+    try {
+      await OrgSignUp.update({ status: "Converted" }, { where: { id: signupId } });
+    } catch (e) {
+      console.log("failed to flip OrgSignUp.status to Converted", e.message);
+    }
+  }
+
+  return organizationData;
+};
+
 module.exports = {
   createCompany,
+  createTrialOrganization,
   getAllCompanies,
   getCompanyById,
   updateCompany,

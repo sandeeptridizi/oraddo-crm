@@ -15,6 +15,11 @@ const creatieSignUp = async (data) => {
     if (password) {
       payload.password = await bcrypt.hash(password, 10);
     }
+    // New public signups start as "Processing" — flipped to "Converted" by
+    // /api/signup/start-trial once the operational Organization is built.
+    if (!payload.status) {
+      payload.status = "Processing";
+    }
 
     const admin = await OrgSignUp.create(payload);
     return admin;

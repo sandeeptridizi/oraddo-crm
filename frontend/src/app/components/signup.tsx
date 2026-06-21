@@ -1,53 +1,75 @@
 import { useState } from "react";
+import { Navigate, useNavigate } from "react-router";
 import { Button } from "./ui/button";
-import { Mail, Lock, Eye, EyeOff, ArrowRight, User, Building2, Phone, Briefcase } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight, User, Building2, Phone, Sparkles } from "lucide-react";
 import api from "../api";
 
-type UserType = "user" | "admin" | "employee";
+export function SignupPage() {
+  const navigate = useNavigate();
 
-interface SignupProps {
-  role: UserType;
-  onSwitchRole?: (role: UserType) => void;
-  onShowLogin: () => void;
-}
-
-export function Signup({ role, onSwitchRole, onShowLogin }: SignupProps) {
   const [fullName, setFullName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [email, setEmail] = useState("");
   const [companyName, setCompanyName] = useState("");
-  const [title, setTitle] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // If the user has already completed the form, send them to pricing.
+  const hasPending = (() => {
+    try {
+      return !!sessionStorage.getItem("signupPending");
+    } catch {
+      return false;
+    }
+  })();
+  if (hasPending) {
+    return <Navigate to="/pricing" replace />;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
 
     if (password !== confirmPassword) {
-      alert("Passwords do not match.");
+      setError("Passwords do not match.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
       return;
     }
 
     try {
       setIsSubmitting(true);
-      await api.post("/api/orgRegister", {
+      const res = await api.post("/api/signup-org-pending", {
         fullName,
         phoneNumber,
         email,
         companyName,
-        title,
         password,
-        userType: role
       });
-
-      alert("Signup successful. Please sign in.");
-      onShowLogin();
-    } catch (error) {
-      console.error("Signup failed", error);
-      alert("Signup failed. Please try again.");
+      const data = (res.data as any) || {};
+      if (!data.signupToken) {
+        setError(data.message || "Signup failed. Please try again.");
+        return;
+      }
+      // Stash the pending signup so /pricing can complete the flow.
+      sessionStorage.setItem(
+        "signupPending",
+        JSON.stringify({
+          signupToken: data.signupToken,
+          signupId: data.signupId,
+          email: data.email || email,
+          password, // needed by /api/signup/start-trial to re-derive the bcrypt hash
+        })
+      );
+      navigate("/pricing");
+    } catch (e: any) {
+      setError(e?.response?.data?.message || "Signup failed. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -81,22 +103,22 @@ export function Signup({ role, onSwitchRole, onShowLogin }: SignupProps) {
             <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-[#937CB4]/10 to-transparent rounded-full blur-2xl"></div>
 
             <div className="relative z-10">
-              <div className="grid grid-cols-3 gap-2 mb-4">
-                <Button type="button" onClick={() => onSwitchRole?.("user")} variant="outline" className={role === "user" ? "border-[#422462] text-[#422462]" : "border-[#937CB4]/30 text-[#5A4079]"}>User</Button>
-                <Button type="button" onClick={() => onSwitchRole?.("admin")} variant="outline" className={role === "admin" ? "border-[#422462] text-[#422462]" : "border-[#937CB4]/30 text-[#5A4079]"}>Admin</Button>
-                <Button type="button" onClick={() => onSwitchRole?.("employee")} variant="outline" className={role === "employee" ? "border-[#422462] text-[#422462]" : "border-[#937CB4]/30 text-[#5A4079]"}>Employee</Button>
+              <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full bg-[#F0E9FF] border border-[#937CB4]/30 text-xs font-semibold text-[#422462]">
+                <Sparkles className="h-3.5 w-3.5" /> For organizations
               </div>
 
               <h2 className="text-2xl font-bold text-[#200B43] mb-2">
-                {role === "admin" ? "Create Admin Account" : role === "employee" ? "Create Employee Account" : "Create User Account"}
+                Create your workspace
               </h2>
               <p className="text-[#5A4079] text-sm mb-6">
-                {role === "admin"
-                  ? "Register a super admin profile"
-                  : role === "employee"
-                  ? "Register an employee workspace account"
-                  : "Register your company and start using Oraddo CRM"}
+                Register your company and start using Oraddo CRM
               </p>
+
+              {error && (
+                <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
@@ -153,20 +175,7 @@ export function Signup({ role, onSwitchRole, onShowLogin }: SignupProps) {
                       value={companyName}
                       onChange={(e) => setCompanyName(e.target.value)}
                       placeholder="Enter your company name"
-                      className="w-full pl-11 pr-4 py-3 rounded-lg border border-[#937CB4]/20 bg-white/90 backdrop-blur-xl focus:outline-none focus:ring-2 focus:ring-[#937CB4] text-[#200B43] transition-all"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-[#200B43] mb-2">Job Title</label>
-                  <div className="relative">
-                    <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-[#5A4079]" />
-                    <input
-                      type="text"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      placeholder="Enter your role/title"
+                      required
                       className="w-full pl-11 pr-4 py-3 rounded-lg border border-[#937CB4]/20 bg-white/90 backdrop-blur-xl focus:outline-none focus:ring-2 focus:ring-[#937CB4] text-[#200B43] transition-all"
                     />
                   </div>
@@ -180,7 +189,7 @@ export function Signup({ role, onSwitchRole, onShowLogin }: SignupProps) {
                       type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Create password"
+                      placeholder="Create password (min 6 characters)"
                       required
                       className="w-full pl-11 pr-12 py-3 rounded-lg border border-[#937CB4]/20 bg-white/90 backdrop-blur-xl focus:outline-none focus:ring-2 focus:ring-[#937CB4] text-[#200B43] transition-all"
                     />
@@ -227,11 +236,11 @@ export function Signup({ role, onSwitchRole, onShowLogin }: SignupProps) {
 
                 <Button
                   type="button"
-                  onClick={onShowLogin}
+                  onClick={() => navigate("/")}
                   variant="outline"
                   className="w-full py-3 border-[#937CB4]/30 text-[#422462] hover:bg-[#F0E9FF]/50"
                 >
-                  Back to {role === "admin" ? "Admin" : role === "employee" ? "Employee" : "User"} Sign In
+                  Back to Sign In
                 </Button>
               </form>
             </div>

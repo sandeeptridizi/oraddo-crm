@@ -7,7 +7,8 @@ exports.getAllPlans = async () => {
             include:[{
                 model: depModule,
                 attributes:["id","name"]
-            }]
+            }],
+            order: [['id', 'ASC']],
         });
         return (plans);
     } catch (error) {

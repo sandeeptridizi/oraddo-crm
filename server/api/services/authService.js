@@ -165,7 +165,25 @@ const unifiedSignIn = async (identifier, password) => {
           },
           order: [["id", "ASC"]],
         });
-        const organizationId = organization ? organization.id : admin.id;
+
+        // If no Organization row exists yet, the user registered but never
+        // selected a plan. Issue a fresh signup-pending token so the frontend
+        // can drop them back onto the pricing page to complete the flow.
+        if (!organization) {
+          const signupToken = jwt.sign(
+            { signupId: admin.id, email: admin.email, purpose: "signup-pending" },
+            JWT_SECRET,
+            { expiresIn: "30m" }
+          );
+          return {
+            needsPlan: true,
+            signupToken,
+            signupId: admin.id,
+            email: admin.email,
+          };
+        }
+
+        const organizationId = organization.id;
 
         const token = jwt.sign(
           { userId: admin.id, organizationId, email: admin.email, role: "organization" },

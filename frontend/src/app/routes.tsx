@@ -3,6 +3,10 @@ import { NotFound } from "./components/not-found";
 import AppLayout from "./layouts/app-layout";
 import EmployeeLayout from "./layouts/employee-layout";
 import AdminLayout from "./layouts/admin-layout";
+import { SignupPage } from "./components/signup";
+import { PricingPage } from "./components/pricing-page";
+import { PaymentComplete } from "./components/payment-complete";
+import { Login } from "./components/login";
 
 // Main App Components
 import { Dashboard } from "./components/dashboard";
@@ -57,9 +61,33 @@ import { AdminCoupons } from "./components/admin/admin-coupons";
 import { AdminQueries } from "./components/admin/admin-queries";
 import { AdminSettings } from "./components/admin/admin-settings";
 
+// Pick the right landing page based on the current auth state. The session is
+// stored in sessionStorage by login.tsx and pricing-page.tsx on success.
+function RootRoute() {
+  const authed = sessionStorage.getItem("isAuthenticated") === "true";
+  const userType = sessionStorage.getItem("userType");
+  if (!authed) {
+    return (
+      <Login
+        onLogin={(type) => {
+          if (type === "admin") window.location.href = "/admin/dashboard";
+          else if (type === "employee") window.location.href = "/employee/dashboard";
+          else window.location.href = "/app/dashboard";
+        }}
+        onShowSignup={() => { window.location.href = "/signup"; }}
+      />
+    );
+  }
+  if (userType === "admin") return <Navigate to="/admin/dashboard" replace />;
+  if (userType === "employee") return <Navigate to="/employee/dashboard" replace />;
+  return <Navigate to="/app/dashboard" replace />;
+}
+
 export const router = createBrowserRouter([
-  // Redirect root to dashboard
-  { index: true, path: "/", element: <Navigate to="/app/dashboard" replace /> },
+  // Root: pick a destination based on auth state. Authenticated users go to
+  // their portal; everyone else gets the login screen with a "Create account"
+  // link that navigates to /signup.
+  { index: true, path: "/", element: <RootRoute /> },
 
   // Main App Routes
   {
@@ -194,6 +222,13 @@ export const router = createBrowserRouter([
       { path: "settings", element: <AdminSettings /> },
     ],
   },
+
+  // Public signup funnel — mounted at the top level so unauthenticated visitors
+  // can reach them via direct navigation. SignupPage self-guards by checking
+  // sessionStorage for an existing signupToken and forwarding to /pricing.
+  { path: "signup", element: <SignupPage /> },
+  { path: "pricing", element: <PricingPage /> },
+  { path: "payment-complete", element: <PaymentComplete /> },
 
   // 404 Not Found
   { path: "*", element: <NotFound /> },

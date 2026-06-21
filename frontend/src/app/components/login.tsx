@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router";
 import { Button } from "./ui/button";
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
 import api from "../api";
@@ -11,7 +12,8 @@ interface LoginProps {
 }
 
 export function Login({ onLogin, onShowSignup }: LoginProps) {
-const [email, setEmail] = useState("");
+  const navigate = useNavigate();
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
@@ -38,7 +40,26 @@ const getUserTypeFromRole = (role: string): UserType => {
           fullName: string;
           email: string;
         };
+        needsPlan?: boolean;
+        signupToken?: string;
+        signupId?: number;
+        email?: string;
       };
+
+      // Org registered but never selected a plan — send them back to pricing.
+      if (responseData.needsPlan && responseData.signupToken) {
+        sessionStorage.setItem(
+          "signupPending",
+          JSON.stringify({
+            signupToken: responseData.signupToken,
+            signupId: responseData.signupId,
+            email: responseData.email || email,
+            password,
+          })
+        );
+        navigate("/pricing");
+        return;
+      }
 
       if (responseData.token) {
         sessionStorage.setItem("token", responseData.token);
