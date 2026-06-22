@@ -1,21 +1,16 @@
 const express = require('express');
-const router = express.Router();
+const { Middleware } = require('../middleware/authMiddleware');
+const planModuleGuard = require('../middleware/planModuleGuard');
 const trainingController = require('../controllers/TrainingManagementController');
 
-// Create a new training record
-router.post('/trainingManagement', trainingController.createTraining);
+const router = express.Router();
 
-// Get all training records
-router.get('/trainingManagement', trainingController.getTrainings);
+const guard = [Middleware, planModuleGuard("Training&Learning")];
 
-// Get a specific training record by ID
-router.get('/trainingManagement/:id', trainingController.getTrainingById);
-
-// Update a training record by ID
-router.put('/trainingManagement/:id', trainingController.updateTraining);
-
-// Delete a training record by ID
-router.delete('/trainingManagement/:id', trainingController.deleteTraining);
+router.post('/trainingManagement', guard, trainingController.createTraining);
+router.get('/trainingManagement', guard, trainingController.getTrainings);
+router.get('/trainingManagement/:id', guard, trainingController.getTrainingById);
+router.put('/trainingManagement/:id', guard, trainingController.updateTraining);
+router.delete('/trainingManagement/:id', guard, trainingController.deleteTraining);
 
 module.exports = router;
-

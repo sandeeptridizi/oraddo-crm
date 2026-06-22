@@ -83,6 +83,13 @@ const startTrial = async (req, res) => {
             return res.status(401).json({ status: false, message: "Signup token email mismatch" });
         }
 
+        if (signup.status === "Converted") {
+            return res.status(403).json({
+                status: false,
+                message: "You have already used your free trial. Please purchase a subscription to continue.",
+            });
+        }
+
         // Build the trial Organization row using the original plaintext password
         // (we need to bcrypt it again here — the OrgSignUp copy was hashed at
         // signup time and is not reversible).

@@ -51,6 +51,7 @@ import { HROrgSalaryAdvance } from "./components/hr-org-management";
 import { Diagnostics } from "./components/diagnostics";
 import { HRPerformanceMetrics, HRSalaryStructure, HRResignation } from "./components/hr-all-remaining";
 import { OrganizationSettings } from "./components/organization-settings";
+import { BillingSubscription } from "./components/billing-subscription";
 
 // Admin Components
 import { AdminDashboard } from "./components/admin/admin-dashboard";
@@ -153,6 +154,7 @@ export const router = createBrowserRouter([
       { path: "notifications", element: <Notifications /> },
       { path: "profile", element: <Profile /> },
       { path: "settings/organization", element: <OrganizationSettings /> },
+      { path: "settings/billing", element: <BillingSubscription /> },
       { path: "support", element: <Support /> },
       { path: "diagnostics", element: <Diagnostics /> },
     ],

@@ -70,6 +70,7 @@ export default function AppLayout() {
   const [financeExpanded, setFinanceExpanded] = useState(false);
   const [projectExpanded, setProjectExpanded] = useState(false);
   const [orgMgmtExpanded, setOrgMgmtExpanded] = useState(false);
+  const [settingsExpanded, setSettingsExpanded] = useState(false);
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
   const isSectionActive = (prefix: string) => location.pathname.includes(prefix);
@@ -101,6 +102,7 @@ export default function AppLayout() {
       "/app/notifications": { title: "Notifications", subtitle: "Stay updated with system alerts" },
       "/app/profile": { title: "My Profile", subtitle: "Manage your personal information and preferences" },
       "/app/settings/organization": { title: "Organization Settings", subtitle: "Manage your company branding and logo" },
+      "/app/settings/billing": { title: "Billing & Subscription", subtitle: "View your active plan, days remaining, and billing history" },
       "/app/hr/attendance": { title: "Attendance", subtitle: "Monitor employee attendance and leave" },
       "/app/hr/performance-metrics": { title: "My Performance Metrics", subtitle: "Track your monthly performance and achievements" },
       "/app/hr/salary-structure": { title: "My Salary Structure", subtitle: "View your salary breakdown and compensation details" },
@@ -848,19 +850,58 @@ export default function AppLayout() {
             </Button>
           </Link>
 
-          <Link to="/app/settings/organization" onClick={() => { if (window.innerWidth < 1024) setSidebarOpen(false); }}>
+          {/* Settings — collapsible group */}
+          <div>
             <Button
               variant="ghost"
+              onClick={() => setSettingsExpanded(!settingsExpanded)}
               className={`w-full justify-start transition-all duration-300 group relative overflow-hidden ${
-                isActive("/app/settings/organization")
+                isSectionActive("/app/settings")
                   ? 'bg-gradient-to-r from-[#422462] to-[#5A4079] text-white hover:from-[#422462] hover:to-[#5A4079] shadow-lg shadow-[#937CB4]/30'
                   : 'text-[#200B43] hover:bg-[#F0E9FF]/70 hover:text-[#200B43]'
               }`}
             >
-              <Building2 className="mr-3 h-5 w-5" />
-              <span className="relative z-10">Settings</span>
+              <Building2 className="mr-3 h-5 w-5 shrink-0" />
+              <span className="relative z-10 flex-1 text-left min-w-0 truncate">Settings</span>
+              {settingsExpanded
+                ? <ChevronDown className="h-4 w-4 shrink-0" />
+                : <ChevronRight className="h-4 w-4 shrink-0" />}
             </Button>
-          </Link>
+
+            <div className={`overflow-hidden transition-all duration-300 ${settingsExpanded ? 'max-h-40 opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+              <div className="ml-2 space-y-1">
+                <Link to="/app/settings/organization" onClick={() => { if (window.innerWidth < 1024) setSidebarOpen(false); }}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={`w-full justify-start transition-all duration-300 ${
+                      isActive("/app/settings/organization")
+                        ? 'bg-gradient-to-r from-[#937CB4] to-[#5A4079] text-white hover:from-[#937CB4] hover:to-[#5A4079] shadow-md'
+                        : 'text-[#200B43] hover:bg-[#F0E9FF]/70 hover:text-[#422462]'
+                    }`}
+                  >
+                    <Building2 className="mr-2 h-4 w-4 shrink-0" />
+                    <span className="text-sm">Organization</span>
+                  </Button>
+                </Link>
+
+                <Link to="/app/settings/billing" onClick={() => { if (window.innerWidth < 1024) setSidebarOpen(false); }}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={`w-full justify-start transition-all duration-300 ${
+                      isActive("/app/settings/billing")
+                        ? 'bg-gradient-to-r from-[#937CB4] to-[#5A4079] text-white hover:from-[#937CB4] hover:to-[#5A4079] shadow-md'
+                        : 'text-[#200B43] hover:bg-[#F0E9FF]/70 hover:text-[#422462]'
+                    }`}
+                  >
+                    <CreditCard className="mr-2 h-4 w-4 shrink-0" />
+                    <span className="text-sm">Billing & Subscription</span>
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
  
