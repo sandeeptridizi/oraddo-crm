@@ -635,6 +635,10 @@ app.get("/health", (req, res) => {
   res.status(200).send("OK");
 });
 
+app.get("/", (req, res) => {
+  res.status(200).json({ message: "Oraddo Server Healthy" });
+});
+
 const _dirname = path.dirname("");
 const buildPath = path.join(_dirname, "../client/dist");
 

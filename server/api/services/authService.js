@@ -251,6 +251,56 @@ const unifiedSignIn = async (identifier, password) => {
   }
 };
 
+// Mint an organization session WITHOUT a password check. Used after an
+// already-verified action (e.g. a confirmed PhonePe payment) where the caller
+// holds only the bcrypt hash, not the plaintext, so unifiedSignIn's
+// bcrypt.compare would always fail. Resolves OrgSignUp -> Organization by email
+// and returns the same { token, role, user } shape as unifiedSignIn's org branch.
+const createSessionForOrg = async (email) => {
+  const JWT_SECRET = process.env.JWT_SECRET;
+  if (!email) {
+    throw new Error("email is required to create an org session");
+  }
+
+  const admin = await OrgSignUp.findOne({ where: { email } });
+  if (!admin) {
+    throw new Error("Signup record not found for session");
+  }
+
+  const organization = await Organization.findOne({
+    where: {
+      [Op.or]: [
+        { email: admin.email },
+        { userName: admin.email },
+        { companyName: admin.companyName },
+      ],
+    },
+    order: [["id", "ASC"]],
+  });
+
+  if (!organization) {
+    throw new Error("Organization not found for session");
+  }
+
+  const organizationId = organization.id;
+  const token = jwt.sign(
+    { userId: admin.id, organizationId, email: admin.email, role: "organization" },
+    JWT_SECRET,
+    { expiresIn: "1d" }
+  );
+  return {
+    token,
+    role: "organization",
+    user: {
+      id: admin.id,
+      fullName: admin.fullName,
+      email: admin.email,
+      role: "organization",
+      organizationId,
+    },
+  };
+};
+
 const signIn = async (userName, password, organizationId) => {
   const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -364,6 +414,7 @@ module.exports = {
   //   signUp,
   signIn,
   unifiedSignIn,
+  createSessionForOrg, // Mint org session post-payment (no password check)
   signOut, // Export the signOut function
   isTokenBlacklisted, // Export function to check token blacklisting
 };
