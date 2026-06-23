@@ -120,16 +120,17 @@ const newPayment = async (req, res) => {
     const merchantOrderId = req.body.transactionId;
     const planId = req?.body?.planId?.id;
     const organizationId = req?.body?.organizationId;
+    const billingCycle = req.body.billingCycle || "quarterly";
+    const amount = Number(req.body.amount) || 0;
 
-    // The new redirectUrl carries no POST body from PhonePe, so we encode the
-    // identifiers we need into the callback path itself.
+    // Encode all identifiers into the callback URL (PhonePe redirects via GET).
     const redirectUrl = planId
-      ? `${CALLBACK_BASE}/api/status/${merchantOrderId}/${planId}/${organizationId}`
+      ? `${CALLBACK_BASE}/api/status/${merchantOrderId}/${planId}/${organizationId}/${billingCycle}/${amount}`
       : `${CALLBACK_BASE}/api/status/${merchantOrderId}`;
 
     const order = await createCheckoutOrder({
       merchantOrderId,
-      amountInPaise: Math.round(Number(req.body.amount) * 100),
+      amountInPaise: Math.round(amount * 100),
       redirectUrl,
       message: "Oraddo plan renewal",
       metaInfo: {
@@ -151,7 +152,7 @@ const newPayment = async (req, res) => {
 // Existing flow: status callback for plan renewal
 // ---------------------------------------------------------------------------
 const checkStatus = async (req, res) => {
-  const { transactionId, planId, organizationId } = req.params; // transactionId == merchantOrderId
+  const { transactionId, planId, organizationId, billingCycle, amount } = req.params;
 
   if (!transactionId) {
     return res.status(400).json({ success: false, message: "Missing transactionId" });
@@ -165,6 +166,8 @@ const checkStatus = async (req, res) => {
         await axios.post(`${CALLBACK_BASE}/api/organizationInvoice`, {
           organizationId,
           planId,
+          billingCycle: billingCycle || "quarterly",
+          amount: amount ? Number(amount) : undefined,
         });
         return res.redirect(`${FRONTEND_URL}/successrenwal`);
       }
@@ -291,6 +294,8 @@ const signupPaymentCallback = async (req, res) => {
         companyName: signup.companyName,
         city: null,
         planId: pending.planId,
+        billingCycle: pending.billingCycle, // quarterly / halfYearly / annually
+        amount: pending.amount,
         signupId: signup.id,
       });
     } catch (orgErr) {

@@ -15,45 +15,46 @@ const getNextInvoiceNumber = async () => {
     }
 };
 
+// Months per billing cycle
+const CYCLE_MONTHS = { quarterly: 3, halfYearly: 6, annually: 12 };
+
 const createOrganizationInvoice = async (data) => {
     try {
         if (data.planId) {
-            const selectedPlan = await PremiumPlans.findByPk(data.planId);
-            if (selectedPlan) {
-                const duration = selectedPlan.duration; // e.g., "3 Months"
-                const durationParts = duration.split(' '); // ["3", "Months"]
+            const now = new Date();
+            let expiryDate = new Date(now);
 
-                if (durationParts.length === 2) {
-                    const value = parseInt(durationParts[0], 10); // Extract the numeric value
-                    const unit = durationParts[1].toLowerCase(); // Extract the time unit (e.g., "month", "year")
-
-                    let expiryDate = new Date(); // Start from the current date
-                    switch (unit) {
-                        case 'month':
-                        case 'months':
-                            expiryDate.setMonth(expiryDate.getMonth() + value); // Add months
-                            break;
-                        case 'year':
-                        case 'years':
-                            expiryDate.setFullYear(expiryDate.getFullYear() + value); // Add years
-                            break;
-                        case 'day':
-                        case 'days':
-                            expiryDate.setDate(expiryDate.getDate() + value); // Add days
-                            break;
-                        default:
-                            throw new Error('Invalid plan duration unit');
+            if (data.billingCycle && CYCLE_MONTHS[data.billingCycle]) {
+                // Use billing cycle for exact duration
+                expiryDate.setMonth(expiryDate.getMonth() + CYCLE_MONTHS[data.billingCycle]);
+            } else {
+                // Fallback: parse plan's duration field
+                const selectedPlan = await PremiumPlans.findByPk(data.planId);
+                if (selectedPlan) {
+                    const d = (selectedPlan.duration || '').trim().toLowerCase();
+                    if (d === 'monthly') expiryDate.setMonth(expiryDate.getMonth() + 1);
+                    else if (d === 'quarterly') expiryDate.setMonth(expiryDate.getMonth() + 3);
+                    else if (d === 'halfyearly' || d === 'half-yearly') expiryDate.setMonth(expiryDate.getMonth() + 6);
+                    else if (d === 'yearly' || d === 'annually') expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+                    else {
+                        const parts = d.split(' ');
+                        if (parts.length === 2) {
+                            const value = parseInt(parts[0], 10);
+                            const unit = parts[1];
+                            if (unit.startsWith('month')) expiryDate.setMonth(expiryDate.getMonth() + value);
+                            else if (unit.startsWith('year')) expiryDate.setFullYear(expiryDate.getFullYear() + value);
+                            else if (unit.startsWith('day')) expiryDate.setDate(expiryDate.getDate() + value);
+                        }
                     }
-
-                    // Add 7 days to the expiry date to allow the plan to run for one extra week
-                    const extraWeek = new Date(expiryDate);
-                    extraWeek.setDate(extraWeek.getDate() + 7);
-
-                    data.startDate = new Date(); // Start date is the current date
-                    data.endDate = expiryDate; // Plan expiry date
-                    data.graceDate = extraWeek; // Plan end after an extra week
                 }
             }
+
+            const extraWeek = new Date(expiryDate);
+            extraWeek.setDate(extraWeek.getDate() + 7);
+
+            data.startDate = now;
+            data.endDate = expiryDate;
+            data.graceDate = extraWeek;
         }
 
         data.invoiceNumber = await getNextInvoiceNumber();

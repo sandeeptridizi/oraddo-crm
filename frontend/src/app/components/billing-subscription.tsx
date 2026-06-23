@@ -33,6 +33,7 @@ interface InvoiceData {
   invoiceDate: string;
   startDate: string;
   endDate: string;
+  amount?: number | null;
   organizationInvoice_plan?: { planName: string; price: string };
 }
 
@@ -151,16 +152,11 @@ export function BillingSubscription() {
     ? { label: "Expiring Soon", color: "bg-amber-100 text-amber-700 border-amber-200" }
     : { label: "Active", color: "bg-emerald-100 text-emerald-700 border-emerald-200" };
 
-  const higherPlans = allPlans.filter(
-    (p) => p.isActive !== false && plan && p.id !== plan.id
-  );
-
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-10">
 
       {/* ── Current Plan Card ─────────────────────────────────── */}
       <div className={`relative rounded-2xl bg-gradient-to-br ${PLAN_COLORS[tier]} p-6 text-white overflow-hidden shadow-xl shadow-[#422462]/30`}>
-        {/* decorative blobs */}
         <div className="absolute -top-16 -right-16 w-56 h-56 bg-white/5 rounded-full" />
         <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-white/5 rounded-full" />
 
@@ -197,7 +193,6 @@ export function BillingSubscription() {
             <Stat icon={<Clock className="h-4 w-4" />} label="Expires" value={fmtDate(org?.planExpiryDate ?? null)} />
           </div>
 
-          {/* Days remaining bar */}
           <div className="mt-6">
             <div className="flex justify-between text-sm mb-2">
               <span className="text-white/80">Days remaining</span>
@@ -240,8 +235,8 @@ export function BillingSubscription() {
         </div>
       )}
 
-      {/* ── Upgrade Options ───────────────────────────────────── */}
-      {higherPlans.length > 0 && (
+      {/* ── Available Plans ───────────────────────────────────── */}
+      {allPlans.length > 0 && (
         <div>
           <h3 className="text-[#200B43] font-semibold text-base mb-4 flex items-center gap-2">
             <Rocket className="h-5 w-5 text-[#422462]" />
@@ -337,7 +332,7 @@ export function BillingSubscription() {
                       {fmtDate(inv.startDate)} → {fmtDate(inv.endDate)}
                     </td>
                     <td className="px-6 py-4 text-[#200B43] font-semibold">
-                      ₹{inv.organizationInvoice_plan?.price ?? "—"}
+                      ₹{inv.amount ?? inv.organizationInvoice_plan?.price ?? "—"}
                     </td>
                   </tr>
                 ))}

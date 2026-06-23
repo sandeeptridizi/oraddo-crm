@@ -489,6 +489,8 @@ const createTrialOrganization = async (data) => {
     companyName,
     city,
     planId,
+    billingCycle,
+    amount,
     signupId,
   } = data;
 
@@ -498,8 +500,33 @@ const createTrialOrganization = async (data) => {
   const hashedPassword = password ? (alreadyHashed ? password : await bcrypt.hash(password, 10)) : null;
 
   const now = new Date();
-  const expiry = new Date(now);
-  expiry.setDate(expiry.getDate() + 7);
+  let expiry = new Date(now);
+  let gracePeriodEnd = new Date(now);
+
+  // For paid plans, derive expiry from the plan's actual duration (same logic as createCompany).
+  // Only fall back to 7-day trial when no plan exists or it's the free plan (planId 10).
+  if (billingCycle) {
+    // Paid signup: use the billing cycle the user actually paid for
+    switch (billingCycle) {
+      case 'quarterly':
+        expiry.setMonth(expiry.getMonth() + 3);
+        break;
+      case 'halfYearly':
+        expiry.setMonth(expiry.getMonth() + 6);
+        break;
+      case 'annually':
+        expiry.setFullYear(expiry.getFullYear() + 1);
+        break;
+      default:
+        expiry.setMonth(expiry.getMonth() + 1); // fallback: monthly
+    }
+    gracePeriodEnd = new Date(expiry);
+    gracePeriodEnd.setDate(gracePeriodEnd.getDate() + 7);
+  } else {
+    // Free trial: 7 days, no extra grace week
+    expiry.setDate(expiry.getDate() + 7);
+    gracePeriodEnd = new Date(expiry);
+  }
 
   const organizationData = await Company.create({
     organizationID: `TRIAL-${Date.now()}`,
@@ -521,7 +548,7 @@ const createTrialOrganization = async (data) => {
     city: city || null,
     planStartDate: now,
     planExpiryDate: expiry,
-    planGracePeriodEnd: expiry,
+    planGracePeriodEnd: gracePeriodEnd,
     adminName: fullName || null,
     email: email,
   });
@@ -569,9 +596,10 @@ const createTrialOrganization = async (data) => {
     planId: planId || null,
     startDate: now,
     endDate: expiry,
-    graceDate: expiry,
+    graceDate: gracePeriodEnd,
     invoiceNumber: await getNextInvoiceNumber(),
     invoiceDate: now,
+    amount: amount || null,
   });
 
   // flip OrgSignUp.status to Converted once the operational org row exists

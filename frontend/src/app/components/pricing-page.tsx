@@ -66,6 +66,11 @@ interface PendingSignup {
   password: string;
 }
 
+interface LoggedInOrg {
+  organizationId: number;
+  email: string;
+}
+
 function getPendingSignup(): PendingSignup | null {
   try {
     const raw = sessionStorage.getItem("signupPending");
@@ -76,9 +81,21 @@ function getPendingSignup(): PendingSignup | null {
   return null;
 }
 
+function getLoggedInOrg(): LoggedInOrg | null {
+  try {
+    const token = sessionStorage.getItem("token") || localStorage.getItem("token");
+    const raw = sessionStorage.getItem("userData") || localStorage.getItem("userData");
+    if (!token || !raw) return null;
+    const user = JSON.parse(raw);
+    if (user?.organizationId) return { organizationId: user.organizationId, email: user.email || "" };
+  } catch {}
+  return null;
+}
+
 export function PricingPage() {
   const navigate = useNavigate();
   const pending = getPendingSignup();
+  const loggedInOrg = getLoggedInOrg();
   const [plans, setPlans] = useState<ApiPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -112,7 +129,8 @@ export function PricingPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  if (!pending) {
+  // Redirect to signup only when neither a pending signup nor a logged-in org exists.
+  if (!pending && !loggedInOrg) {
     return <Navigate to="/signup" replace />;
   }
 
@@ -187,12 +205,40 @@ export function PricingPage() {
 
   const handleBuyNow = async (tier: PlanTier) => {
     const slot = cards.find((c) => c.tier === tier);
-    if (!slot?.hasPlan || !slot.planId || !pending) {
+    if (!slot?.hasPlan || !slot.planId) {
       setToast({ kind: "error", message: "This plan is not available right now. Please contact support." });
       return;
     }
     const cycleMultiplier = { quarterly: 3, halfYearly: 2, annually: 1 };
     const totalAmount = slot.price * cycleMultiplier[cycle];
+
+    // Logged-in user: renewal/upgrade flow
+    if (loggedInOrg) {
+      const transactionId = `TXNID-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      try {
+        setBuyNowLoading(tier);
+        const res = await api.post("/api/payment", {
+          transactionId,
+          planId: { id: slot.planId },
+          organizationId: loggedInOrg.organizationId,
+          amount: totalAmount,
+          billingCycle: cycle,
+          name: loggedInOrg.email,
+          number: "",
+        });
+        const redirectUrl = (res.data as any)?.route;
+        if (!redirectUrl) { setToast({ kind: "error", message: "Failed to initiate payment." }); return; }
+        window.location.href = redirectUrl;
+      } catch (e: any) {
+        setToast({ kind: "error", message: e?.response?.data?.message || "Payment initiation failed." });
+      } finally {
+        setBuyNowLoading(null);
+      }
+      return;
+    }
+
+    // New signup: use the signup payment flow
+    if (!pending) return;
     try {
       setBuyNowLoading(tier);
       const res = await api.post("/api/payment/signup", {
@@ -259,11 +305,19 @@ export function PricingPage() {
 
       <div className="relative z-10 max-w-6xl mx-auto px-4 py-10">
         {/* Top bar */}
-        <div className="flex items-center justify-center mb-10">
+        <div className="flex items-center justify-between mb-10">
           <div className="flex items-center gap-2">
             <img src="/favicon.png" alt="Oraddo" className="h-8 w-8 object-contain" />
             <span className="text-sm font-semibold text-[#200B43]">Oraddo AI</span>
           </div>
+          {loggedInOrg && (
+            <button
+              onClick={() => navigate(-1)}
+              className="text-sm text-[#422462] hover:underline flex items-center gap-1"
+            >
+              ← Back
+            </button>
+          )}
         </div>
 
         {/* Title */}
@@ -347,6 +401,7 @@ export function PricingPage() {
                   popular={c.popular}
                   loading={trialLoadingTier === c.tier}
                   buyNowLoading={buyNowLoading === c.tier}
+                  isLoggedIn={!!loggedInOrg}
                   onStartTrial={() => handleStartTrial(c.tier)}
                   onBuyNow={() => handleBuyNow(c.tier)}
                 />

@@ -31,6 +31,7 @@ interface PlanCardProps {
   popular?: boolean;
   loading?: boolean;
   buyNowLoading?: boolean;
+  isLoggedIn?: boolean;
   onStartTrial: () => void;
   onBuyNow?: () => void;
 }
@@ -48,6 +49,7 @@ export function PlanCard({
   popular,
   loading,
   buyNowLoading,
+  isLoggedIn,
   onStartTrial,
   onBuyNow,
 }: PlanCardProps) {
@@ -97,28 +99,54 @@ export function PlanCard({
           <span className={`text-sm ml-1 ${subText}`}>/month</span>
         </div>
 
-        {/* Free Trial CTA — primary button (dark pill) */}
-        <button
-          type="button"
-          onClick={onStartTrial}
-          disabled={loading}
-          className={`mt-6 w-full py-3 rounded-xl text-sm font-semibold flex flex-col items-center justify-center gap-0.5 transition-all
-            ${isPopular
-              ? "bg-white text-[#1f0d3d] hover:bg-[#F0E9FF] shadow-lg shadow-black/20"
-              : "bg-[#1f0d3d] text-white hover:bg-[#2a1450] shadow-md shadow-[#1f0d3d]/30"}
-            disabled:opacity-70 disabled:cursor-not-allowed`}
-        >
-          {loading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <span className="font-semibold">Start Free Trial</span>
-          )}
-          {!loading && (
-            <span className={`text-xs font-normal ${isPopular ? "text-[#5A4079]" : "text-white/75"}`}>
-              ₹ {cycleTotalDisplay} ({cycleLabel})
-            </span>
-          )}
-        </button>
+        {/* Primary CTA */}
+        {isLoggedIn ? (
+          /* Logged-in user: single "Select Plan" button */
+          <button
+            type="button"
+            onClick={onBuyNow}
+            disabled={buyNowLoading}
+            className={`mt-6 w-full py-3 rounded-xl text-sm font-semibold flex flex-col items-center justify-center gap-0.5 transition-all
+              ${isPopular
+                ? "bg-white text-[#1f0d3d] hover:bg-[#F0E9FF] shadow-lg shadow-black/20"
+                : "bg-[#1f0d3d] text-white hover:bg-[#2a1450] shadow-md shadow-[#1f0d3d]/30"}
+              disabled:opacity-70 disabled:cursor-not-allowed`}
+          >
+            {buyNowLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <span className="font-semibold">Select Plan</span>
+            )}
+            {!buyNowLoading && (
+              <span className={`text-xs font-normal ${isPopular ? "text-[#5A4079]" : "text-white/75"}`}>
+                ₹ {cycleTotalDisplay} ({cycleLabel})
+              </span>
+            )}
+          </button>
+        ) : (
+          /* New signup: Trial + Buy Now */
+          <button
+            type="button"
+            onClick={onStartTrial}
+            disabled={loading}
+            className={`mt-6 w-full py-3 rounded-xl text-sm font-semibold flex flex-col items-center justify-center gap-0.5 transition-all
+              ${isPopular
+                ? "bg-white text-[#1f0d3d] hover:bg-[#F0E9FF] shadow-lg shadow-black/20"
+                : "bg-[#1f0d3d] text-white hover:bg-[#2a1450] shadow-md shadow-[#1f0d3d]/30"}
+              disabled:opacity-70 disabled:cursor-not-allowed`}
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <span className="font-semibold">Start Free Trial</span>
+            )}
+            {!loading && (
+              <span className={`text-xs font-normal ${isPopular ? "text-[#5A4079]" : "text-white/75"}`}>
+                ₹ {cycleTotalDisplay} ({cycleLabel})
+              </span>
+            )}
+          </button>
+        )}
 
         {/* Feature list */}
         <ul className={`mt-6 pt-5 border-t space-y-2.5 flex-1 ${hrClass}`}>
@@ -134,19 +162,21 @@ export function PlanCard({
           ))}
         </ul>
 
-        {/* Buy Now — outline secondary */}
-        <button
-          type="button"
-          onClick={onBuyNow}
-          disabled={buyNowLoading}
-          className={`mt-6 w-full py-3 rounded-xl text-sm font-semibold border transition-colors flex items-center justify-center gap-2
-            ${isPopular
-              ? "border-white/30 text-white hover:bg-white/10"
-              : "border-[#1f0d3d] text-[#1f0d3d] hover:bg-[#F0E9FF]"}
-            disabled:opacity-70 disabled:cursor-not-allowed`}
-        >
-          {buyNowLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Buy Now"}
-        </button>
+        {/* Buy Now — only shown for new signups */}
+        {!isLoggedIn && (
+          <button
+            type="button"
+            onClick={onBuyNow}
+            disabled={buyNowLoading}
+            className={`mt-6 w-full py-3 rounded-xl text-sm font-semibold border transition-colors flex items-center justify-center gap-2
+              ${isPopular
+                ? "border-white/30 text-white hover:bg-white/10"
+                : "border-[#1f0d3d] text-[#1f0d3d] hover:bg-[#F0E9FF]"}
+              disabled:opacity-70 disabled:cursor-not-allowed`}
+          >
+            {buyNowLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Buy Now"}
+          </button>
+        )}
       </div>
     </div>
   );

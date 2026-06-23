@@ -35,6 +35,10 @@ const OrganizationInvoices = sequelize.define('OrganizationInvoices', {
         type: DataTypes.DATE,
         allowNull: false,
     },
+    amount: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+    },
 });
 
 module.exports = OrganizationInvoices;

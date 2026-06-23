@@ -16,6 +16,8 @@ router.all('/status/signup/:transactionId', signupPaymentCallback);
 
 // Existing: plan renewal for established orgs
 router.post('/payment', newPayment);
+// More-specific (with billingCycle + amount) must be registered before the shorter variant.
+router.all('/status/:transactionId/:planId/:organizationId/:billingCycle/:amount', checkStatus);
 router.all('/status/:transactionId/:planId/:organizationId', checkStatus);
 router.all('/status/:transactionId', checkStatus);
 
