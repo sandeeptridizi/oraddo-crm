@@ -1,16 +1,13 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { Card, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Modal } from "../ui/modal";
 import {
   Users,
   Search,
-  Plus,
   Edit,
-  Trash2,
   Ban,
-  CheckCircle,
   Mail,
   Phone,
   Calendar,
@@ -20,10 +17,20 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
-  Building2
+  Building2,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import { orgService, ApiOrg } from "../../services/orgService";
 import { plansService } from "../../services/plansService";
+
+interface PlanOption {
+  id: number;
+  planName: string;
+  price: string;
+  duration: string;
+  isActive: boolean;
+}
 
 interface User {
   id: number;
@@ -36,6 +43,10 @@ interface User {
   lastActive: string;
   mrr: number;
   company?: string;
+  isLocked: boolean;
+  organizationId?: number;
+  planExpiryDate?: string;
+  planGracePeriodEnd?: string;
 }
 
 const mapStatusToUI = (status?: string): User["status"] => {
@@ -64,11 +75,16 @@ function mapOrgToUser(org: ApiOrg, planPriceMap: Record<string, number>): User {
     lastActive: org.updatedAt ? org.updatedAt.substring(0, 10) : "—",
     mrr: planPriceMap[org.selectedPlan ?? "Free"] ?? 0,
     company: org.companyName ?? undefined,
+    isLocked: org.isLocked ?? false,
+    organizationId: org.organizationId,
+    planExpiryDate: org.planExpiryDate,
+    planGracePeriodEnd: org.planGracePeriodEnd,
   };
 }
 
 export function AdminUsers() {
   const [users, setUsers] = useState<User[]>([]);
+  const [plans, setPlans] = useState<PlanOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -101,11 +117,14 @@ export function AdminUsers() {
       ]);
 
       const planPriceMap: Record<string, number> = {};
+      let fetchedPlans: PlanOption[] = [];
       if (plansRes.status === "fulfilled" && Array.isArray(plansRes.value.data)) {
-        plansRes.value.data.forEach(p => {
+        fetchedPlans = plansRes.value.data.filter((p: any) => p.isActive !== false);
+        fetchedPlans.forEach((p: any) => {
           planPriceMap[p.planName] = parseFloat(p.price as any) || 0;
         });
       }
+      setPlans(fetchedPlans);
 
       const data = orgsRes.status === "fulfilled" && Array.isArray(orgsRes.value.data?.Clients)
         ? orgsRes.value.data.Clients : [];
@@ -122,11 +141,13 @@ export function AdminUsers() {
     fetchUsers();
   }, []);
 
+  const totalMRR = users.reduce((sum, u) => sum + u.mrr, 0);
+
   const stats = [
     { label: "Total Users", value: users.length, gradient: "from-[#422462] to-[#5A4079]" },
     { label: "Active", value: users.filter(u => u.status === "active").length, gradient: "from-[#5A4079] to-[#937CB4]" },
-    { label: "Paying", value: users.filter(u => u.mrr > 0).length, gradient: "from-[#937CB4] to-[#5A4079]" },
-    { label: "Total MRR", value: `$${users.reduce((sum, u) => sum + u.mrr, 0)}`, gradient: "from-[#422462] to-[#937CB4]" },
+    { label: "Locked", value: users.filter(u => u.isLocked).length, gradient: "from-red-600 to-red-400" },
+    { label: "Total MRR", value: `₹${totalMRR.toLocaleString("en-IN")}`, gradient: "from-[#422462] to-[#937CB4]" },
   ];
 
   const filteredUsers = users.filter(user => {
@@ -189,6 +210,19 @@ export function AdminUsers() {
     }
   };
 
+  const handleUnlockUser = async (user: User) => {
+    if (!user.organizationId) {
+      alert("Cannot unlock: no linked organization found for this user.");
+      return;
+    }
+    try {
+      await orgService.unlockOrg(user.organizationId);
+      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, isLocked: false } : u));
+    } catch (err: any) {
+      alert(err?.response?.data?.message ?? "Failed to unlock organization.");
+    }
+  };
+
   const handleChangePlan = (user: User) => {
     setChangingPlanUser(user);
     setNewPlan(user.plan);
@@ -228,6 +262,17 @@ export function AdminUsers() {
       default: return "bg-gray-500 text-white";
     }
   };
+
+  const planOptions = plans.length > 0
+    ? plans
+    : [
+        { id: 0, planName: "Free", price: "0", duration: "", isActive: true },
+        { id: 1, planName: "Basic", price: "999", duration: "", isActive: true },
+        { id: 2, planName: "Pro", price: "2999", duration: "", isActive: true },
+        { id: 3, planName: "Enterprise", price: "9999", duration: "", isActive: true },
+      ];
+
+  const uniquePlanNames = Array.from(new Set(planOptions.map(p => p.planName)));
 
   return (
     <div className="space-y-6">
@@ -287,10 +332,9 @@ export function AdminUsers() {
                 className="px-4 py-2 rounded-lg border border-[#937CB4]/20 bg-white focus:outline-none focus:ring-2 focus:ring-[#937CB4] text-[#200B43]"
               >
                 <option value="all">All Plans</option>
-                <option value="Free">Free</option>
-                <option value="Basic">Basic</option>
-                <option value="Pro">Pro</option>
-                <option value="Enterprise">Enterprise</option>
+                {uniquePlanNames.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
               </select>
 
               <select
@@ -328,19 +372,27 @@ export function AdminUsers() {
       ) : (
         <div className="grid gap-4">
           {filteredUsers.map((user) => (
-            <Card key={user.id} className="gradient-card gradient-card-hover border-[#937CB4]/30">
+            <Card key={user.id} className={`gradient-card gradient-card-hover border-[#937CB4]/30 ${user.isLocked ? "border-red-300 bg-red-50/30" : ""}`}>
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4 flex-1">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#422462] to-[#5A4079] flex items-center justify-center text-white font-bold text-lg shadow-lg">
-                      {user.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg ${user.isLocked ? "bg-red-500" : "bg-gradient-to-br from-[#422462] to-[#5A4079]"}`}>
+                      {user.isLocked
+                        ? <Lock className="h-5 w-5" />
+                        : user.name.split(" ").map(n => n[0]).join("").slice(0, 2)
+                      }
                     </div>
 
                     <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
+                      <div className="flex items-center gap-3 mb-2 flex-wrap">
                         <h3 className="font-semibold text-lg text-[#200B43]">{user.name}</h3>
                         <Badge className={getPlanBadgeColor(user.plan)}>{user.plan}</Badge>
                         <Badge className={getStatusBadgeColor(user.status)}>{user.status}</Badge>
+                        {user.isLocked && (
+                          <Badge className="bg-red-600 text-white flex items-center gap-1">
+                            <Lock className="h-3 w-3" /> Locked
+                          </Badge>
+                        )}
                       </div>
 
                       {user.company && (
@@ -365,17 +417,37 @@ export function AdminUsers() {
                         </div>
                         <div className="flex items-center gap-2 text-[#5A4079]">
                           <CreditCard className="h-4 w-4" />
-                          <span>MRR: ${user.mrr}</span>
+                          <span>MRR: ₹{user.mrr.toLocaleString("en-IN")}</span>
                         </div>
                       </div>
 
-                      <div className="mt-2 text-xs text-[#958CA7]">
+                      {user.planExpiryDate && (
+                        <div className="mt-2 text-xs text-[#958CA7]">
+                          Plan expires: {user.planExpiryDate.substring(0, 10)}
+                          {user.planGracePeriodEnd && (
+                            <span className="ml-2">· Grace until: {user.planGracePeriodEnd.substring(0, 10)}</span>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="mt-1 text-xs text-[#958CA7]">
                         Last updated: {user.lastActive}
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap justify-end">
+                    {user.isLocked && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-red-300 bg-red-50 hover:bg-red-100 text-red-700"
+                        onClick={() => handleUnlockUser(user)}
+                      >
+                        <Unlock className="h-4 w-4 mr-2" />
+                        Unlock
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"
@@ -478,10 +550,9 @@ export function AdminUsers() {
                   onChange={(e) => setUserForm({ ...userForm, plan: e.target.value })}
                   className="w-full px-4 py-2 rounded-lg border border-[#937CB4]/30 focus:outline-none focus:ring-2 focus:ring-[#937CB4]"
                 >
-                  <option value="Free">Free</option>
-                  <option value="Basic">Basic</option>
-                  <option value="Pro">Pro</option>
-                  <option value="Enterprise">Enterprise</option>
+                  {planOptions.map(p => (
+                    <option key={p.id || p.planName} value={p.planName}>{p.planName}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -513,6 +584,9 @@ export function AdminUsers() {
               <p className="text-sm text-[#5A4079]">Changing plan for:</p>
               <p className="font-semibold text-[#200B43]">{changingPlanUser.name}</p>
               <p className="text-sm text-[#5A4079]">{changingPlanUser.email}</p>
+              <p className="text-sm font-medium text-[#200B43] mt-1">
+                Current plan: <span className="text-[#5A4079]">{changingPlanUser.plan}</span>
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-[#200B43] mb-2">New Plan</label>
@@ -521,10 +595,11 @@ export function AdminUsers() {
                 onChange={(e) => setNewPlan(e.target.value)}
                 className="w-full px-4 py-2 rounded-lg border border-[#937CB4]/30 focus:outline-none focus:ring-2 focus:ring-[#937CB4]"
               >
-                <option value="Free">Free - $0/mo</option>
-                <option value="Basic">Basic - $29/mo</option>
-                <option value="Pro">Pro - $99/mo</option>
-                <option value="Enterprise">Enterprise - $299/mo</option>
+                {planOptions.map(p => (
+                  <option key={p.id || p.planName} value={p.planName}>
+                    {p.planName} — ₹{parseFloat(p.price).toLocaleString("en-IN")}/{p.duration || "mo"}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="flex justify-end gap-3 pt-4">

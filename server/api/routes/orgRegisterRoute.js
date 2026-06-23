@@ -17,4 +17,7 @@ route.post('/signup-org-pending', orgController.signupOrgPending);
 route.post('/signup/start-trial', orgController.startTrial);
 route.get('/plans/public', orgController.getPublicPlans);
 
+// Admin: unlock a locked organization by Organization.id
+route.put('/admin/unlock-org/:id', orgController.unlockOrganization);
+
 module.exports = route

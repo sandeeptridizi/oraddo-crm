@@ -126,11 +126,12 @@ const renewPlan = async (organizationId, newPlanId) => {
     const newGracePeriodEnd = new Date(newExpiryDate);
     newGracePeriodEnd.setDate(newGracePeriodEnd.getDate() + 7);
 
-    // Update the organization's plan details
+    // Update the organization's plan details and clear any lock
     organization.planId = newPlanId;
     organization.planStartDate = newPlanStartDate;
     organization.planExpiryDate = newExpiryDate;
     organization.planGracePeriodEnd = newGracePeriodEnd;
+    organization.isLocked = false;
     await organization.save();
 
     return {

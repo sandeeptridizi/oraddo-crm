@@ -2,6 +2,7 @@ const orgSignServices = require('../services/orgSignUpServices');
 const organizationService = require('../services/OrganizationService');
 const authService = require('../services/authService');
 const premiumPlanService = require('../services/PlansServices');
+const Organization = require('../models/OrganizationModule');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
@@ -206,6 +207,20 @@ const getregisterData = async(req,res)=>{
 }
 
 
+const unlockOrganization = async (req, res) => {
+  try {
+    const { id } = req.params; // Organization.id
+    const org = await Organization.findByPk(id);
+    if (!org) {
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+    await org.update({ isLocked: false });
+    res.status(200).json({ message: 'Organization unlocked successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 module.exports= {
     signUpController,
     signInController,
@@ -214,6 +229,7 @@ module.exports= {
     getregisterData,
     signupOrgPending,
     startTrial,
-    getPublicPlans
+    getPublicPlans,
+    unlockOrganization,
 }
 

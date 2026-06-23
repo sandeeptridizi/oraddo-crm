@@ -121,6 +121,11 @@ const Organization = sequelize.define('Organization', {
     type:DataTypes.STRING,
     allowNull:true
   },
+  isLocked: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+  },
 });
 
 module.exports = Organization;

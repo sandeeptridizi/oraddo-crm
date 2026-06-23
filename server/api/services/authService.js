@@ -183,6 +183,22 @@ const unifiedSignIn = async (identifier, password) => {
           };
         }
 
+        // Block login if admin has locked the org
+        if (organization.isLocked) {
+          throw new Error("Your organization has been locked. Please contact the administrator to unlock your account.");
+        }
+
+        // Auto-lock and block login if the plan grace period has expired
+        const currentDate = new Date();
+        const planGracePeriodEnd = organization.planGracePeriodEnd
+          ? new Date(organization.planGracePeriodEnd)
+          : null;
+
+        if (planGracePeriodEnd && currentDate > planGracePeriodEnd) {
+          await organization.update({ isLocked: true });
+          throw new Error("Your subscription plan has expired and your organization has been locked. Please contact the administrator to unlock your account and renew your plan.");
+        }
+
         const organizationId = organization.id;
 
         const token = jwt.sign(

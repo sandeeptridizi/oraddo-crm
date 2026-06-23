@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import {
   Users,
-  DollarSign,
   TrendingUp,
   Activity,
   CreditCard,
@@ -12,17 +11,17 @@ import {
   ArrowUpRight,
   Loader2,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  IndianRupee,
+  Lock,
 } from "lucide-react";
 import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+  AreaChart, Area, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import { orgService } from "../../services/orgService";
 import { plansService } from "../../services/plansService";
-import { revenueService } from "../../services/revenueService";
-import { notificationService } from "../../services/notificationService";
-import { contactService } from "../../services/contactService";
+import api from "../../api";
 
 const PLAN_COLORS: Record<string, string> = {
   Free: "#937CB4",
@@ -30,6 +29,12 @@ const PLAN_COLORS: Record<string, string> = {
   Pro: "#422462",
   Enterprise: "#200B43",
 };
+
+const DEFAULT_COLOR = "#958CA7";
+
+function formatINR(n: number) {
+  return `₹${n.toLocaleString("en-IN")}`;
+}
 
 export function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -39,10 +44,10 @@ export function AdminDashboard() {
     mrr: 0,
     newUsersToday: 0,
     openQueries: 0,
+    lockedOrgs: 0,
   });
   const [planDistribution, setPlanDistribution] = useState<{ name: string; value: number; color: string }[]>([]);
   const [revenueChartData, setRevenueChartData] = useState<{ month: string; revenue: number }[]>([]);
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,89 +56,80 @@ export function AdminDashboard() {
       setLoading(true);
       setError(null);
 
-      // Fetch everything in parallel
-      const [orgsRes, plansRes, revenuesRes, notifRes, queriesRes] = await Promise.allSettled([
+      const [orgsRes, plansRes, invoicesRes] = await Promise.allSettled([
         orgService.getAll(),
         plansService.getAll(),
-        revenueService.getAll(),
-        notificationService.getAll(),
-        contactService.getAll(),
+        api.get("/api/admin/org-invoices"),
       ]);
 
-      // ── Orgs / Users ──────────────────────────────────
-      const orgsData = orgsRes.status === "fulfilled" ? orgsRes.value.data : null;
-      const orgs: any[] = Array.isArray(orgsData?.Clients) ? orgsData.Clients : [];
+      // ── Orgs ──────────────────────────────────────────
+      const orgs: any[] = orgsRes.status === "fulfilled" && Array.isArray(orgsRes.value.data?.Clients)
+        ? orgsRes.value.data.Clients : [];
 
       const today = new Date().toISOString().substring(0, 10);
       const newUsersToday = orgs.filter(o => (o.createdAt ?? "").startsWith(today)).length;
+      const lockedOrgs = orgs.filter(o => o.isLocked === true).length;
 
-      // Plan distribution from org data
+      // ── Plans price map ────────────────────────────────
+      const plans: any[] = plansRes.status === "fulfilled" && Array.isArray(plansRes.value.data)
+        ? plansRes.value.data : [];
+
+      const planPriceMap: Record<string, number> = {};
+      plans.forEach(p => {
+        planPriceMap[p.planName] = parseFloat(p.price) || 0;
+      });
+
+      // ── Plan distribution — use the real selectedPlan field ──
       const planCounts: Record<string, number> = {};
       orgs.forEach(o => {
-        const plan = o.plan ?? o.planName ?? o.subscriptionPlan ?? "Free";
+        const plan = o.selectedPlan ?? "Free";
         planCounts[plan] = (planCounts[plan] ?? 0) + 1;
       });
 
-      // ── Plans ─────────────────────────────────────────
-      const plans = plansRes.status === "fulfilled" && Array.isArray(plansRes.value.data)
-        ? plansRes.value.data : [];
-
-      // Fall back to plan names from orgs if plans API didn't return useful data
-      const planNames = plans.length > 0 ? plans.map(p => p.name) : Object.keys(planCounts);
-      const distribution = planNames
-        .filter(name => planCounts[name] !== undefined)
-        .map(name => ({
-          name,
-          value: planCounts[name] ?? 0,
-          color: PLAN_COLORS[name] ?? "#937CB4",
-        }));
-      // also include any plan names from orgs not in plans API
-      Object.keys(planCounts).forEach(name => {
-        if (!distribution.find(d => d.name === name)) {
-          distribution.push({ name, value: planCounts[name], color: PLAN_COLORS[name] ?? "#937CB4" });
-        }
-      });
+      const distribution = Object.entries(planCounts).map(([name, value]) => ({
+        name,
+        value,
+        color: PLAN_COLORS[name] ?? DEFAULT_COLOR,
+      }));
       setPlanDistribution(distribution);
 
+      // ── Active subscriptions (paid + status Converted) ──
       const activeSubscriptions = orgs.filter(o => {
-        const plan = o.plan ?? o.planName ?? "Free";
-        return plan !== "Free" && (o.status ?? "active") === "active";
+        const plan = o.selectedPlan ?? "Free";
+        return plan !== "Free" && o.status === "Converted";
       }).length;
 
-      // ── Revenue ───────────────────────────────────────
-      const revenues = revenuesRes.status === "fulfilled" && Array.isArray(revenuesRes.value.data)
-        ? revenuesRes.value.data : [];
+      // ── MRR from plan prices × active paid orgs ────────
+      let mrr = 0;
+      orgs.forEach(o => {
+        if ((o.selectedPlan ?? "Free") !== "Free" && o.status === "Converted") {
+          mrr += planPriceMap[o.selectedPlan] ?? 0;
+        }
+      });
 
-      const totalRevenue = revenues.reduce((sum, r) => sum + (r.amount ?? r.totalRevenue ?? 0), 0);
-      const currentMonth = new Date().toISOString().substring(0, 7);
-      const mrr = revenues
-        .filter(r => (r.createdAt ?? r.month ?? "").startsWith(currentMonth))
-        .reduce((sum, r) => sum + (r.amount ?? r.totalRevenue ?? 0), 0);
+      // ── Revenue from OrganizationInvoices ─────────────
+      const invoices: any[] = invoicesRes.status === "fulfilled" && Array.isArray(invoicesRes.value.data?.data)
+        ? invoicesRes.value.data.data : [];
 
-      // Build chart from last 6 revenue records
-      const chartData = revenues.slice(-6).map((r, i) => ({
-        month: r.month ?? r.createdAt?.substring(0, 7) ?? `M${i + 1}`,
-        revenue: r.amount ?? r.totalRevenue ?? 0,
-      }));
+      const totalRevenue = invoices.reduce((sum, inv) => {
+        const amt = inv.amount ?? inv.organizationInvoice_plan?.price ?? 0;
+        return sum + (parseFloat(String(amt)) || 0);
+      }, 0);
+
+      // Revenue trend — group by YYYY-MM from invoiceDate
+      const monthlyMap: Record<string, number> = {};
+      invoices.forEach(inv => {
+        const month = (inv.invoiceDate ?? inv.createdAt ?? "").substring(0, 7);
+        if (!month) return;
+        const amt = parseFloat(String(inv.amount ?? inv.organizationInvoice_plan?.price ?? 0)) || 0;
+        monthlyMap[month] = (monthlyMap[month] ?? 0) + amt;
+      });
+
+      const chartData = Object.entries(monthlyMap)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .slice(-6)
+        .map(([month, revenue]) => ({ month, revenue }));
       setRevenueChartData(chartData);
-
-      // ── Notifications (recent activity) ───────────────
-      const notifs = notifRes.status === "fulfilled" && Array.isArray(notifRes.value.data)
-        ? notifRes.value.data : [];
-
-      const activity = notifs.slice(0, 6).map((n: any, i: number) => ({
-        id: n._id ?? i,
-        action: n.message ?? n.title ?? "Platform event",
-        user: n.email ?? n.adminId ?? "System",
-        time: n.createdAt ? new Date(n.createdAt).toLocaleTimeString() : "—",
-        status: n.type === "error" ? "error" : n.type === "warning" ? "warning" : "success",
-      }));
-      setRecentActivity(activity);
-
-      // ── Queries (open = null/Processing status, not Converted/Dead) ──
-      const contacts = queriesRes.status === "fulfilled" && Array.isArray(queriesRes.value.data)
-        ? queriesRes.value.data : [];
-      const openQueries = contacts.filter(q => q.status !== "Converted" && q.status !== "Dead").length;
 
       setStats({
         totalUsers: orgs.length,
@@ -141,7 +137,8 @@ export function AdminDashboard() {
         activeSubscriptions,
         mrr,
         newUsersToday,
-        openQueries,
+        openQueries: 0,
+        lockedOrgs,
       });
     } catch (err: any) {
       console.error("Dashboard fetch error:", err);
@@ -157,28 +154,24 @@ export function AdminDashboard() {
     {
       label: "Total Users",
       value: stats.totalUsers,
-      change: "+live",
       icon: Users,
       gradient: "from-[#937CB4] to-[#5A4079]",
     },
     {
       label: "Total Revenue",
-      value: `$${stats.totalRevenue.toLocaleString()}`,
-      change: "live",
-      icon: DollarSign,
+      value: formatINR(stats.totalRevenue),
+      icon: IndianRupee,
       gradient: "from-[#5A4079] to-[#422462]",
     },
     {
       label: "Active Subscriptions",
       value: stats.activeSubscriptions,
-      change: "live",
       icon: CreditCard,
       gradient: "from-[#422462] to-[#200B43]",
     },
     {
       label: "MRR (This Month)",
-      value: `$${stats.mrr.toLocaleString()}`,
-      change: "live",
+      value: formatINR(stats.mrr),
       icon: TrendingUp,
       gradient: "from-[#937CB4] via-[#5A4079] to-[#422462]",
     },
@@ -233,7 +226,7 @@ export function AdminDashboard() {
 
       {/* Charts Row */}
       <div className="grid gap-4 md:grid-cols-2">
-        {/* Revenue Chart */}
+        {/* Revenue Trend */}
         <Card className="gradient-card border-[#937CB4]/30">
           <CardHeader>
             <CardTitle className="text-[#200B43] flex items-center gap-2">
@@ -255,16 +248,19 @@ export function AdminDashboard() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#937CB4" opacity={0.2} />
-                  <XAxis dataKey="month" stroke="#5A4079" />
-                  <YAxis stroke="#5A4079" />
-                  <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #937CB4', borderRadius: '8px' }} />
+                  <XAxis dataKey="month" stroke="#5A4079" tick={{ fontSize: 12 }} />
+                  <YAxis stroke="#5A4079" tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#fff", border: "1px solid #937CB4", borderRadius: "8px" }}
+                    formatter={(value: any) => [formatINR(value), "Revenue"]}
+                  />
                   <Legend />
-                  <Area type="monotone" dataKey="revenue" stroke="#422462" fillOpacity={1} fill="url(#revenueGradient)" name="Revenue ($)" />
+                  <Area type="monotone" dataKey="revenue" stroke="#422462" fillOpacity={1} fill="url(#revenueGradient)" name="Revenue (₹)" />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
               <div className="flex items-center justify-center h-[300px] text-[#5A4079]">
-                <p className="text-sm">No revenue data available yet.</p>
+                <p className="text-sm">No subscription revenue recorded yet.</p>
               </div>
             )}
           </CardContent>
@@ -283,24 +279,40 @@ export function AdminDashboard() {
                 <Loader2 className="h-8 w-8 animate-spin text-[#937CB4]" />
               </div>
             ) : planDistribution.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={planDistribution}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, value }) => `${name}: ${value}`}
-                    outerRadius={100}
-                    dataKey="value"
-                  >
-                    {planDistribution.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #937CB4', borderRadius: '8px' }} />
-                </PieChart>
-              </ResponsiveContainer>
+              <>
+                <ResponsiveContainer width="100%" height={220}>
+                  <PieChart>
+                    <Pie
+                      data={planDistribution}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) =>
+                        `${name}: ${(percent * 100).toFixed(0)}%`
+                      }
+                      outerRadius={90}
+                      dataKey="value"
+                    >
+                      {planDistribution.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#fff", border: "1px solid #937CB4", borderRadius: "8px" }}
+                      formatter={(value: any, name: any) => [`${value} users`, name]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                {/* Legend */}
+                <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-2">
+                  {planDistribution.map(entry => (
+                    <div key={entry.name} className="flex items-center gap-1.5 text-sm text-[#5A4079]">
+                      <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
+                      {entry.name}: <strong>{entry.value}</strong>
+                    </div>
+                  ))}
+                </div>
+              </>
             ) : (
               <div className="flex items-center justify-center h-[300px] text-[#5A4079]">
                 <p className="text-sm">No subscription data available yet.</p>
@@ -310,53 +322,13 @@ export function AdminDashboard() {
         </Card>
       </div>
 
-      {/* Recent Activity */}
-      <Card className="gradient-card border-[#937CB4]/30">
-        <CardHeader>
-          <CardTitle className="text-[#200B43] flex items-center gap-2">
-            <Activity className="h-5 w-5" /> Recent Activity
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-[#937CB4]" />
-            </div>
-          ) : recentActivity.length > 0 ? (
-            <div className="space-y-3 max-h-[300px] overflow-y-auto">
-              {recentActivity.map((activity) => (
-                <div
-                  key={activity.id}
-                  className="flex items-start gap-3 p-3 rounded-lg bg-gradient-to-r from-[#F0E9FF] to-white border border-[#937CB4]/20 hover:shadow-md transition-all"
-                >
-                  <div className={`w-2 h-2 rounded-full mt-2 ${
-                    activity.status === "success" ? "bg-green-500" :
-                    activity.status === "error" ? "bg-red-500" :
-                    activity.status === "warning" ? "bg-yellow-500" : "bg-blue-500"
-                  }`}></div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-[#200B43]">{activity.action}</p>
-                    <p className="text-xs text-[#5A4079]">{activity.user}</p>
-                    <p className="text-xs text-[#958CA7] mt-1">{activity.time}</p>
-                  </div>
-                  <Sparkles className="h-4 w-4 text-[#937CB4] opacity-60" />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="py-8 text-center text-[#5A4079] text-sm">
-              No recent activity found.
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Quick Stats Row */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         {[
-          { label: "New Users Today", value: stats.newUsersToday, icon: UserCheck, note: "Live from DB" },
-          { label: "Active Subscriptions", value: stats.activeSubscriptions, icon: CreditCard, note: "Paid plans only" },
-          { label: "Open Queries", value: stats.openQueries, icon: UserX, note: "Pending + in-progress" },
+          { label: "New Users Today", value: stats.newUsersToday, icon: UserCheck, note: "Registered today" },
+          { label: "Active Subscriptions", value: stats.activeSubscriptions, icon: CreditCard, note: "Paid plans · active orgs" },
+          { label: "Locked Orgs", value: stats.lockedOrgs, icon: Lock, note: "Plan expired — needs unlock" },
+          { label: "MRR", value: formatINR(stats.mrr), icon: TrendingUp, note: "Monthly recurring revenue" },
         ].map((s) => {
           const Icon = s.icon;
           return (

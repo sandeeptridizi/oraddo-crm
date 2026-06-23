@@ -93,7 +93,16 @@ const getByOrganizationId = async (organizationId) => {
     return invoices;
 };
 
+const getAllInvoices = async () => {
+    const invoices = await organizationInvoice.findAll({
+        include: [{ model: PremiumPlans, as: 'organizationInvoice_plan', attributes: ['id', 'planName', 'price', 'duration'] }],
+        order: [['invoiceDate', 'DESC']],
+    });
+    return invoices;
+};
+
 module.exports = {
     createOrganizationInvoice,
     getByOrganizationId,
+    getAllInvoices,
 };

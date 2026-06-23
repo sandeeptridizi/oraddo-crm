@@ -13,6 +13,11 @@ export interface ApiOrg {
   status?: string;       // ENUM: "Converted" | "Dead" | "Processing"
   createdAt?: string;
   updatedAt?: string;
+  // Merged from Organization table by getSignUpData
+  organizationId?: number;
+  isLocked?: boolean;
+  planExpiryDate?: string;
+  planGracePeriodEnd?: string;
   [key: string]: any;
 }
 
@@ -27,4 +32,7 @@ export const orgService = {
   update: (id: number, data: Partial<ApiOrg>) => api.put<ApiOrg>(`/api/orgRegister/${id}`, data),
   renewPlan: (id: number, data: { selectedPlan: string }) =>
     api.put(`/api/renewel/${id}`, data),
+  // Unlock a locked org — id is Organization.id (from the organizationId field)
+  unlockOrg: (organizationId: number) =>
+    api.put(`/api/admin/unlock-org/${organizationId}`),
 };

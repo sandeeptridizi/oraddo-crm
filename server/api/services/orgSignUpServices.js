@@ -1,6 +1,9 @@
 const OrgSignUp = require("../models/organizationSignUp");
+const Organization = require("../models/OrganizationModule");
+const PremiumPlans = require("../models/premiumPlans");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { Op } = require("sequelize");
 const JWT_SECRET = process.env.JWT_SECRET;
 
 const creatieSignUp = async (data) => {
@@ -72,11 +75,46 @@ const orgSignIn = async (data) => {
 
 const getSignUpData = async () => {
   try {
-    const getResponse = await OrgSignUp.findAll();
-    const data = getResponse.map((record) => record?.dataValues);
+    const allSignUps = await OrgSignUp.findAll();
+
+    // Attempt to merge Organization data (isLocked, plan dates) — fail gracefully
+    let orgByEmail = {};
+    try {
+      const emails = allSignUps.map((s) => s.email).filter(Boolean);
+      if (emails.length > 0) {
+        const organizations = await Organization.findAll({
+          where: { email: { [Op.in]: emails } },
+          include: [{ model: PremiumPlans, as: "organization_plan", required: false }],
+        });
+        organizations.forEach((org) => {
+          if (!orgByEmail[org.email]) orgByEmail[org.email] = org;
+        });
+      }
+    } catch (orgErr) {
+      console.log("Could not merge Organization data:", orgErr.message);
+    }
+
+    const data = allSignUps.map((record) => {
+      const rv = { ...record.dataValues };
+      const org = orgByEmail[record.email];
+      if (org) {
+        rv.organizationId = org.id;
+        rv.isLocked = org.isLocked ?? false;
+        rv.planExpiryDate = org.planExpiryDate;
+        rv.planGracePeriodEnd = org.planGracePeriodEnd;
+        // Use the actual purchased plan name from Organization → PremiumPlans
+        if (org.organization_plan) {
+          rv.selectedPlan = org.organization_plan.planName;
+        }
+      } else {
+        rv.isLocked = false;
+      }
+      return rv;
+    });
     return data;
   } catch (error) {
     console.log(error, "data not getting in services");
+    return [];
   }
 };
 

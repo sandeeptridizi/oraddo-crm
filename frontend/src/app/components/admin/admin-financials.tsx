@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import {
-  DollarSign,
   TrendingUp,
   Download,
   Calendar,
@@ -15,28 +14,67 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
-  BarChart2
+  BarChart2,
+  IndianRupee,
+  Receipt,
 } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { revenueService, invoiceService, ApiRevenue, ApiInvoice } from "../../services/revenueService";
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  Legend, ResponsiveContainer, BarChart, Bar,
+} from "recharts";
+import { invoiceService, ApiInvoice } from "../../services/revenueService";
+import api from "../../api";
+
+interface OrgInvoice {
+  id: number;
+  organizationId: number;
+  planId: number;
+  invoiceNumber: string;
+  invoiceDate: string;
+  startDate: string;
+  endDate: string;
+  amount: number;
+  organizationInvoice_plan?: { planName: string; price: string; duration: string };
+  [key: string]: any;
+}
+
+function formatINR(n: number) {
+  return `₹${n.toLocaleString("en-IN")}`;
+}
+
+function parseAmount(inv: ApiInvoice): number {
+  if (inv.Total) return parseFloat(String(inv.Total).replace(/[^0-9.]/g, "")) || 0;
+  if (Array.isArray(inv.amount)) return inv.amount.reduce((s: number, v: number) => s + (v || 0), 0);
+  return 0;
+}
 
 export function AdminFinancials() {
-  const [revenues, setRevenues] = useState<ApiRevenue[]>([]);
-  const [invoices, setInvoices] = useState<ApiInvoice[]>([]);
+  const [orgInvoices, setOrgInvoices] = useState<OrgInvoice[]>([]);
+  const [clientInvoices, setClientInvoices] = useState<ApiInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dateRange, setDateRange] = useState("30");
+  const [dateRange, setDateRange] = useState("90");
 
   const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const [revRes, invRes] = await Promise.all([
-        revenueService.getAll(),
+      const [orgInvRes, clientInvRes] = await Promise.allSettled([
+        api.get("/api/admin/org-invoices"),
         invoiceService.getAll(),
       ]);
-      setRevenues(Array.isArray(revRes.data) ? revRes.data : []);
-      setInvoices(Array.isArray(invRes.data) ? invRes.data : []);
+
+      const orgInvData: OrgInvoice[] =
+        orgInvRes.status === "fulfilled" && Array.isArray(orgInvRes.value.data?.data)
+          ? orgInvRes.value.data.data
+          : [];
+      setOrgInvoices(orgInvData);
+
+      const clientInvData: ApiInvoice[] =
+        clientInvRes.status === "fulfilled" && Array.isArray(clientInvRes.value.data)
+          ? clientInvRes.value.data
+          : [];
+      setClientInvoices(clientInvData);
     } catch (err: any) {
       console.error("Failed to fetch financial data:", err);
       setError(err?.response?.data?.message ?? "Failed to load financial data from server.");
@@ -47,39 +85,55 @@ export function AdminFinancials() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // ─── Apply date range filter client-side ────────────────────────────────────
+  // ── Date range filter ─────────────────────────────────────────────────────
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - parseInt(dateRange));
   const cutoffStr = cutoff.toISOString().substring(0, 10);
 
-  const filteredInvoices = invoices.filter(inv => {
+  const filteredOrgInv = orgInvoices.filter(inv => {
+    const d = (inv.invoiceDate ?? inv.createdAt ?? "").substring(0, 10);
+    return !d || d >= cutoffStr;
+  });
+
+  const filteredClientInv = clientInvoices.filter(inv => {
     const d = (inv.Date ?? inv.createdAt ?? "").substring(0, 10);
     return !d || d >= cutoffStr;
   });
-  const filteredRevenues = revenues.filter(r => {
-    const d = (r.date ?? r.createdAt ?? "").substring(0, 10);
-    return !d || d >= cutoffStr;
-  });
 
-  // ─── Derive summary stats ───────────────────────────────────────────────────
-  const totalRevenue = filteredRevenues.reduce((sum, r) => sum + (r.total_calculation ?? r.credit ?? 0), 0);
-  const successInvoices = filteredInvoices.filter(i => (i.status ?? "").toLowerCase() === "approved");
-  const pendingInvoices = filteredInvoices.filter(i => (i.status ?? "").toLowerCase() === "pending");
-  const failedInvoices = filteredInvoices.filter(i => (i.status ?? "").toLowerCase() === "decline");
+  // ── Stats ─────────────────────────────────────────────────────────────────
+  const subscriptionRevenue = filteredOrgInv.reduce((s, inv) => s + (inv.amount || 0), 0);
+  const clientRevenue = filteredClientInv.reduce((s, inv) => s + parseAmount(inv), 0);
+  const totalRevenue = subscriptionRevenue + clientRevenue;
+
+  const paidClientInv = filteredClientInv.filter(i => (i.status ?? "").toLowerCase() === "approved");
+  const pendingClientInv = filteredClientInv.filter(i => (i.status ?? "").toLowerCase() === "pending");
 
   const stats = [
-    { label: "Total Revenue", value: `$${totalRevenue.toLocaleString()}`, gradient: "from-[#422462] to-[#5A4079]" },
-    { label: "Total Transactions", value: filteredInvoices.length, gradient: "from-[#5A4079] to-[#937CB4]" },
-    { label: "Paid Invoices", value: successInvoices.length, gradient: "from-[#937CB4] to-[#5A4079]" },
-    { label: "Pending Invoices", value: pendingInvoices.length, gradient: "from-[#422462] to-[#937CB4]" },
+    { label: "Total Revenue", value: formatINR(totalRevenue), gradient: "from-[#422462] to-[#5A4079]" },
+    { label: "Subscription Revenue", value: formatINR(subscriptionRevenue), gradient: "from-[#5A4079] to-[#937CB4]" },
+    { label: "Paid Invoices", value: paidClientInv.length, gradient: "from-[#937CB4] to-[#5A4079]" },
+    { label: "Pending Invoices", value: pendingClientInv.length, gradient: "from-[#422462] to-[#937CB4]" },
   ];
 
-  // Build monthly chart data from filtered revenues
-  const chartData = filteredRevenues.slice(-6).map((r, i) => ({
-    month: r.date ? r.date.substring(0, 7) : r.createdAt?.substring(0, 7) ?? `M${i + 1}`,
-    revenue: r.total_calculation ?? r.credit ?? 0,
-  }));
+  // ── Revenue chart — subscription invoices grouped by month ─────────────────
+  const monthlyMap: Record<string, number> = {};
+  filteredOrgInv.forEach(inv => {
+    const month = (inv.invoiceDate ?? inv.createdAt ?? "").substring(0, 7);
+    if (!month) return;
+    monthlyMap[month] = (monthlyMap[month] ?? 0) + (inv.amount || 0);
+  });
+  // Also fold in client invoices
+  filteredClientInv.forEach(inv => {
+    const month = (inv.Date ?? inv.createdAt ?? "").substring(0, 7);
+    if (!month) return;
+    monthlyMap[month] = (monthlyMap[month] ?? 0) + parseAmount(inv);
+  });
 
+  const chartData = Object.entries(monthlyMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, revenue]) => ({ month, revenue }));
+
+  // ── Status helpers ────────────────────────────────────────────────────────
   const getStatusIcon = (status: string) => {
     const s = (status ?? "").toLowerCase();
     if (s === "approved") return <CheckCircle className="h-5 w-5 text-green-600" />;
@@ -106,8 +160,11 @@ export function AdminFinancials() {
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, index) => (
-          <div key={index} className="relative overflow-hidden rounded-xl border border-[#937CB4]/20 bg-white/90 backdrop-blur-xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 group">
-            <div className={`absolute inset-0 bg-gradient-to-br ${stat.gradient} opacity-5 group-hover:opacity-10 transition-opacity`}></div>
+          <div
+            key={index}
+            className="relative overflow-hidden rounded-xl border border-[#937CB4]/20 bg-white/90 backdrop-blur-xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 group"
+          >
+            <div className={`absolute inset-0 bg-gradient-to-br ${stat.gradient} opacity-5 group-hover:opacity-10 transition-opacity`} />
             <div className="relative z-10">
               <p className="text-sm text-[#5A4079] mb-1">{stat.label}</p>
               <h3 className="text-3xl font-bold text-[#200B43]">
@@ -171,15 +228,14 @@ export function AdminFinancials() {
       ) : (
         <>
           {/* Revenue Chart */}
-          {chartData.length > 0 && (
-            <Card className="gradient-card border-[#937CB4]/30">
-              <CardHeader>
-                <CardTitle className="text-[#200B43] flex items-center gap-2">
-                  <BarChart2 className="h-5 w-5" />
-                  Revenue Trend
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+          <Card className="gradient-card border-[#937CB4]/30">
+            <CardHeader>
+              <CardTitle className="text-[#200B43] flex items-center gap-2">
+                <BarChart2 className="h-5 w-5" /> Revenue Trend
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {chartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <AreaChart data={chartData}>
                     <defs>
@@ -189,34 +245,94 @@ export function AdminFinancials() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#937CB4" opacity={0.2} />
-                    <XAxis dataKey="month" stroke="#5A4079" />
-                    <YAxis stroke="#5A4079" />
-                    <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #937CB4', borderRadius: '8px' }} />
+                    <XAxis dataKey="month" stroke="#5A4079" tick={{ fontSize: 12 }} />
+                    <YAxis
+                      stroke="#5A4079"
+                      tick={{ fontSize: 12 }}
+                      tickFormatter={(v) => v >= 1000 ? `₹${(v / 1000).toFixed(0)}k` : `₹${v}`}
+                    />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#fff", border: "1px solid #937CB4", borderRadius: "8px" }}
+                      formatter={(value: any) => [formatINR(value), "Revenue"]}
+                    />
                     <Legend />
-                    <Area type="monotone" dataKey="revenue" stroke="#422462" fillOpacity={1} fill="url(#revGrad)" name="Revenue ($)" />
+                    <Area type="monotone" dataKey="revenue" stroke="#422462" fillOpacity={1} fill="url(#revGrad)" name="Revenue (₹)" />
                   </AreaChart>
                 </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
+              ) : (
+                <div className="flex items-center justify-center h-[300px] text-[#5A4079]">
+                  <p className="text-sm">No revenue data in the selected period.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-          {/* Invoices / Transactions */}
+          {/* Subscription Billing Transactions */}
           <Card className="gradient-card border-[#937CB4]/30">
             <CardHeader>
               <CardTitle className="text-[#200B43] flex items-center gap-2">
                 <CreditCard className="h-5 w-5" />
-                Recent Transactions ({filteredInvoices.length})
+                Subscription Billing ({filteredOrgInv.length})
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {filteredInvoices.length === 0 ? (
-                <div className="py-12 text-center text-[#5A4079]">
-                  <DollarSign className="h-10 w-10 mx-auto mb-3 text-[#937CB4]" />
-                  <p>No transactions found.</p>
+              {filteredOrgInv.length === 0 ? (
+                <div className="py-10 text-center text-[#5A4079]">
+                  <IndianRupee className="h-10 w-10 mx-auto mb-3 text-[#937CB4]" />
+                  <p className="text-sm">No subscription invoices in the selected period.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {filteredInvoices.slice(0, 20).map((inv) => (
+                  {filteredOrgInv.map((inv) => (
+                    <div
+                      key={inv.id}
+                      className="flex items-center justify-between p-4 rounded-lg bg-gradient-to-r from-[#F0E9FF] to-white border border-[#937CB4]/20 hover:shadow-md transition-all"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+                          <CreditCard className="h-5 w-5 text-[#422462]" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-[#200B43]">{inv.invoiceNumber}</p>
+                          <p className="text-sm text-[#5A4079]">
+                            {inv.organizationInvoice_plan?.planName ?? `Plan #${inv.planId}`}
+                            {inv.organizationInvoice_plan?.duration ? ` · ${inv.organizationInvoice_plan.duration}` : ""}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-center text-sm text-[#5A4079]">
+                        <p>{inv.startDate?.substring(0, 10) ?? "—"}</p>
+                        <p className="text-xs text-[#958CA7]">→ {inv.endDate?.substring(0, 10) ?? "—"}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-[#200B43]">{formatINR(inv.amount ?? 0)}</p>
+                        <p className="text-xs text-[#958CA7]">{inv.invoiceDate?.substring(0, 10) ?? "—"}</p>
+                      </div>
+                      <Badge className="bg-green-500 text-white">Paid</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Client Invoice Transactions */}
+          <Card className="gradient-card border-[#937CB4]/30">
+            <CardHeader>
+              <CardTitle className="text-[#200B43] flex items-center gap-2">
+                <Receipt className="h-5 w-5" />
+                Recent Transactions ({filteredClientInv.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {filteredClientInv.length === 0 ? (
+                <div className="py-10 text-center text-[#5A4079]">
+                  <Receipt className="h-10 w-10 mx-auto mb-3 text-[#937CB4]" />
+                  <p className="text-sm">No transactions in the selected period.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredClientInv.slice(0, 20).map((inv) => (
                     <div
                       key={inv.id}
                       className="flex items-center justify-between p-4 rounded-lg bg-gradient-to-r from-[#F0E9FF] to-white border border-[#937CB4]/20 hover:shadow-md transition-all"
@@ -226,17 +342,17 @@ export function AdminFinancials() {
                           {getStatusIcon(inv.status ?? "")}
                         </div>
                         <div>
-                          <p className="font-medium text-[#200B43]">{inv.invoiceId ?? inv.id?.toString()?.slice(-8).toUpperCase()}</p>
+                          <p className="font-medium text-[#200B43]">{inv.invoiceId ?? String(inv.id)}</p>
                           <p className="text-sm text-[#5A4079]">{inv.clientName ?? inv.billTo ?? "—"}</p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-[#200B43]">${inv.Total ?? (inv.amount?.[0] ?? 0)}</p>
-                        <p className="text-xs text-[#5A4079]">{inv.invoiceType ?? "—"}</p>
+                        <p className="font-bold text-[#200B43]">{formatINR(parseAmount(inv))}</p>
+                        <p className="text-xs text-[#5A4079]">{inv.invoiceType ?? inv.base?.[0] ?? "—"}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm text-[#5A4079]">{inv.currency ?? "—"}</p>
-                        <p className="text-xs text-[#958CA7]">{inv.Date ? inv.Date.substring(0, 10) : "—"}</p>
+                      <div className="text-right text-sm text-[#5A4079]">
+                        <p>{inv.currency ?? "INR"}</p>
+                        <p className="text-xs text-[#958CA7]">{inv.Date ? inv.Date.substring(0, 10) : inv.createdAt?.substring(0, 10) ?? "—"}</p>
                       </div>
                       <Badge className={getStatusBadge(inv.status ?? "")}>{inv.status ?? "unknown"}</Badge>
                     </div>

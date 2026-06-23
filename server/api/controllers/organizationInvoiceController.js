@@ -18,7 +18,17 @@ const getByOrganizationId = async (req, res) => {
   }
 };
 
+const getAllInvoices = async (req, res) => {
+  try {
+    const invoices = await OrganizationInvoice.getAllInvoices();
+    res.status(200).json({ success: true, data: invoices });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
     createOrganizationInvoice,
     getByOrganizationId,
+    getAllInvoices,
   };
