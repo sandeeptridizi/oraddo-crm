@@ -140,18 +140,11 @@ export function Dashboard({ onNavigate }: { onNavigate?: (view: string) => void 
     setIsRefreshing(true);
     try {
       const orgId = typeof currentUser.organizationId === 'string' ? parseInt(currentUser.organizationId) : currentUser.organizationId;
-      
-      // Parallel data fetching
-      const [
-        attendanceRes,
-        leadsRes,
-        projectsRes,
-        empRes,
-        invoiceRes,
-        revenueRes,
-        meetingRes,
-        jobRes
-      ] = await Promise.all([
+
+      // Parallel data fetching — settled independently so one restricted/failing
+      // widget (e.g. a plan-gated module) doesn't blank out the whole dashboard.
+      const sourceNames = ["attendance", "leads", "projects", "employees", "invoices", "revenue", "meetings", "jobs"];
+      const settled = await Promise.allSettled([
         attendanceService.getTodaysTeamStatus(orgId),
         leadService.getLeadsByOrg(orgId),
         projectService.getProjectsByOrg(orgId),
@@ -161,6 +154,23 @@ export function Dashboard({ onNavigate }: { onNavigate?: (view: string) => void 
         meetingService.getMeetingsByOrg(orgId),
         jobService.getJobsByOrg(orgId)
       ]);
+
+      const [
+        attendanceRes,
+        leadsRes,
+        projectsRes,
+        empRes,
+        invoiceRes,
+        revenueRes,
+        meetingRes,
+        jobRes
+      ] = settled.map((result, i) => {
+        if (result.status === "rejected") {
+          console.error(`Dashboard: ${sourceNames[i]} fetch failed`, result.reason);
+          return { data: [] };
+        }
+        return result.value;
+      });
 
       // 1. Process Employees & Demographics
       const allEmps = empRes.data || [];
@@ -235,7 +245,8 @@ export function Dashboard({ onNavigate }: { onNavigate?: (view: string) => void 
       setPunchActivity(activities);
 
       // 6. Process Revenue & Chart (Rolling 6 Months)
-      const invoices = invoiceRes.data || [];
+      // getByOrg returns { invoices, totalInvoice }, so the rows live under .data.invoices.
+      const invoices = invoiceRes.data?.invoices || invoiceRes.data || [];
       const revenues = revenueRes.data || [];
       
       const totalRevValue = invoices.reduce((sum: number, inv: any) => sum + (parseFloat(inv.Total) || 0), 0);
@@ -300,7 +311,8 @@ export function Dashboard({ onNavigate }: { onNavigate?: (view: string) => void 
       setRevenueChartData(rollingData);
 
       // 7. Process Meetings & Events
-      const meetings = meetingRes.data || [];
+      // getMeetingsByOrg returns { success, data }, so the rows live under .data.data.
+      const meetings = meetingRes.data?.data || meetingRes.data || [];
       setEvents(meetings.map((m: any) => ({
         id: m.id,
         title: m.summary || m.title || 'Untitled Meeting',

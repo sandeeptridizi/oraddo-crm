@@ -169,11 +169,11 @@ const checkStatus = async (req, res) => {
           billingCycle: billingCycle || "quarterly",
           amount: amount ? Number(amount) : undefined,
         });
-        return res.redirect(`${FRONTEND_URL}/successrenwal`);
+        return res.redirect(`${FRONTEND_URL}/payment-complete?status=success`);
       }
-      return res.redirect(`${FRONTEND_URL}/success`);
+      return res.redirect(`${FRONTEND_URL}/payment-complete?status=success`);
     } else {
-      return res.redirect(`${FRONTEND_URL}/failure`);
+      return res.redirect(`${FRONTEND_URL}/payment-complete?status=failure`);
     }
   } catch (error) {
     console.error("checkStatus error:", error.response?.data || error.message);

@@ -21,7 +21,7 @@ const getAllRevenues = async (req, res) => {
 const getAllRevenuesbyOrganizationId = async (req, res) => {
   try {
     const { year } = req.query;
-    const yearInt = parseInt(year);
+    const yearInt = parseInt(year) || new Date().getFullYear();
     const revenues = await revenueService.getAllRevenuesbyOrganizationId(req.params.id,yearInt);
     res.status(200).json(revenues);
   } catch (error) {

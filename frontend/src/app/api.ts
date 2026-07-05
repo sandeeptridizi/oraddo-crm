@@ -44,4 +44,27 @@ api.interceptors.response.use(
   }
 );
 
+// ── Shared Logout ───────────────────────────────────────────────────────────
+// Single source of truth for logging out — clears BOTH storages (the request
+// interceptor above only reads localStorage, but sessionStorage drives the
+// header's user info and route guards), so no stale identity survives into
+// the next login/signup.
+export async function logout() {
+  try {
+    await api.post("/api/auth/signout");
+  } catch (error) {
+    console.error("Signout failed", error);
+  }
+  sessionStorage.removeItem("token");
+  sessionStorage.removeItem("userData");
+  sessionStorage.removeItem("userType");
+  sessionStorage.removeItem("isAuthenticated");
+  sessionStorage.removeItem("signupPending");
+  try {
+    localStorage.removeItem("token");
+    localStorage.removeItem("userData");
+  } catch {}
+  window.location.href = "/";
+}
+
 export default api;

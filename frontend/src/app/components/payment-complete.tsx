@@ -15,6 +15,7 @@ export function PaymentComplete() {
     const failReason = params.get("reason");
 
     if (paymentStatus === "success" && token) {
+      // Fresh signup flow — no existing session yet, so establish one from the token.
       try {
         const user = userRaw ? JSON.parse(decodeURIComponent(userRaw)) : {};
         sessionStorage.setItem("token", decodeURIComponent(token));
@@ -34,6 +35,12 @@ export function PaymentComplete() {
       } catch {
         setStatus("failure");
       }
+    } else if (paymentStatus === "success") {
+      // Renewal/upgrade flow — user is already logged in, no new token to apply.
+      setStatus("success");
+      setTimeout(() => {
+        window.location.href = "/app/dashboard";
+      }, 1500);
     } else {
       setStatus("failure");
       if (failReason === "already_processed") {

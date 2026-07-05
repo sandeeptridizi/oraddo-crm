@@ -19,7 +19,7 @@ const Middleware = async (req, res, next) => {
         
      const user = await User.findOne({
         where:{
-            id: decoded.user.id,
+            id: decoded.userId,
         },
       });
       console.log(user,"user..");

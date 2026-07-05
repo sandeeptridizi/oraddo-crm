@@ -309,6 +309,7 @@ const createCompany = async (data, files) => {
       graceDate: data.planGracePeriodEnd,
       invoiceNumber: await getNextInvoiceNumber(),
       invoiceDate: new Date(),
+      amount: data.amount || null,
     };
     await OrganizationInvoices.create(inoviceData);
   }

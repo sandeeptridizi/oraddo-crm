@@ -57,6 +57,17 @@ export function SignupPage() {
         setError(data.message || "Signup failed. Please try again.");
         return;
       }
+      // Drop any leftover session from previous logins/testing so /pricing
+      // and the rest of the app don't mistake this fresh signup for that old org.
+      sessionStorage.removeItem("token");
+      sessionStorage.removeItem("userData");
+      sessionStorage.removeItem("userType");
+      sessionStorage.removeItem("isAuthenticated");
+      try {
+        localStorage.removeItem("token");
+        localStorage.removeItem("userData");
+      } catch {}
+
       // Stash the pending signup so /pricing can complete the flow.
       sessionStorage.setItem(
         "signupPending",

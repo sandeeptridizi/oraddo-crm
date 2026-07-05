@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router";
 import { Button } from "../components/ui/button";
-import { 
-  Menu, 
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "../components/ui/dropdown-menu";
+import { logout } from "../api";
+import {
+  Menu,
   X,
   LayoutDashboard,
   Users,
@@ -14,7 +16,8 @@ import {
   ChevronDown,
   Bell,
   Search,
-  Sparkles
+  Sparkles,
+  LogOut
 } from "lucide-react";
 
 export default function AdminLayout() {
@@ -113,16 +116,26 @@ export default function AdminLayout() {
               <span className="absolute top-0 right-0 h-2 w-2 bg-red-500 rounded-full"></span>
             </Button>
 
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#422462]/10 to-[#5A4079]/10 border border-[#937CB4]/20">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#422462] to-[#5A4079] flex items-center justify-center text-white font-bold text-sm">
-                SA
-              </div>
-              <div className="hidden md:block">
-                <p className="text-sm font-semibold text-[#200B43]">{adminInfo.fullName}</p>
-                <p className="text-xs text-[#5A4079]">{adminInfo.email}</p>
-              </div>
-              <ChevronDown className="h-4 w-4 text-[#5A4079]" />
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#422462]/10 to-[#5A4079]/10 border border-[#937CB4]/20 cursor-pointer hover:bg-[#F0E9FF]/50 transition-colors">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#422462] to-[#5A4079] flex items-center justify-center text-white font-bold text-sm">
+                    SA
+                  </div>
+                  <div className="hidden md:block">
+                    <p className="text-sm font-semibold text-[#200B43]">{adminInfo.fullName}</p>
+                    <p className="text-xs text-[#5A4079]">{adminInfo.email}</p>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-[#5A4079]" />
+                </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => logout()} variant="destructive">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>

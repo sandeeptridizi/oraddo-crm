@@ -212,6 +212,33 @@ export function PricingPage() {
     const cycleMultiplier = { quarterly: 3, halfYearly: 2, annually: 1 };
     const totalAmount = slot.price * cycleMultiplier[cycle];
 
+    // A signup completed on this exact page load always wins over a stale
+    // logged-in session lingering in storage from earlier testing/browsing.
+    if (pending) {
+      try {
+        setBuyNowLoading(tier);
+        const res = await api.post("/api/payment/signup", {
+          signupToken: pending.signupToken,
+          planId: slot.planId,
+          amount: totalAmount,
+          billingCycle: cycle,
+          name: pending.email,
+          phone: "",
+        });
+        const redirectUrl = (res.data as any)?.redirectUrl;
+        if (!redirectUrl) {
+          setToast({ kind: "error", message: "Failed to initiate payment." });
+          return;
+        }
+        window.location.href = redirectUrl;
+      } catch (e: any) {
+        setToast({ kind: "error", message: e?.response?.data?.message || "Payment initiation failed." });
+      } finally {
+        setBuyNowLoading(null);
+      }
+      return;
+    }
+
     // Logged-in user: renewal/upgrade flow
     if (loggedInOrg) {
       const transactionId = `TXNID-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -234,31 +261,6 @@ export function PricingPage() {
       } finally {
         setBuyNowLoading(null);
       }
-      return;
-    }
-
-    // New signup: use the signup payment flow
-    if (!pending) return;
-    try {
-      setBuyNowLoading(tier);
-      const res = await api.post("/api/payment/signup", {
-        signupToken: pending.signupToken,
-        planId: slot.planId,
-        amount: totalAmount,
-        billingCycle: cycle,
-        name: pending.email,
-        phone: "",
-      });
-      const redirectUrl = (res.data as any)?.redirectUrl;
-      if (!redirectUrl) {
-        setToast({ kind: "error", message: "Failed to initiate payment." });
-        return;
-      }
-      window.location.href = redirectUrl;
-    } catch (e: any) {
-      setToast({ kind: "error", message: e?.response?.data?.message || "Payment initiation failed." });
-    } finally {
-      setBuyNowLoading(null);
     }
   };
 

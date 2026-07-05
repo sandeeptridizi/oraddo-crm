@@ -332,7 +332,7 @@ export function BillingSubscription() {
                       {fmtDate(inv.startDate)} → {fmtDate(inv.endDate)}
                     </td>
                     <td className="px-6 py-4 text-[#200B43] font-semibold">
-                      ₹{inv.amount ?? inv.organizationInvoice_plan?.price ?? "—"}
+                      {inv.amount != null ? `₹${inv.amount}` : "—"}
                     </td>
                   </tr>
                 ))}
